@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* LexGraph 법률 분석 플러그인 전용 스타일 */
+.lexgraph-view {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 쟁점 트리 들여쓰기 — CSS 변수 기반 (인라인 스타일 대체) */
+.lexgraph-issue-node {
+  padding-left: calc(var(--lg-depth, 0) * 16px + 12px);
+}
