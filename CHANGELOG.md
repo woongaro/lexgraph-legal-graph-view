@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1
+
+- 설정 저장 이벤트 실패 시 unhandled rejection이 남지 않도록 예외 처리와 완료 이벤트 흐름을 보강했다.
+- 법률 엔티티 추출기에서 당사자 역할 추출의 위치 계산을 정리해 `match.index` 의존성을 안전하게 만들었다.
+- API 클라이언트 테스트를 `requestUrl` 기준으로 실제 구현과 맞췄다.
+- Vitest용 Obsidian stub alias를 추가해 테스트 환경에서 `obsidian` 모듈 해석이 안정적으로 동작하도록 했다.
+
 ## 1.2.0
 
 - Obsidian ReviewBot 대응을 위해 외부 네트워크 호출을 `fetch`에서 `requestUrl` 기반으로 정리했다.
