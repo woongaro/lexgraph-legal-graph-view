@@ -76,6 +76,31 @@ const ISSUE_KEYWORD_PATTERNS: Record<string, { pattern: RegExp; issueType: strin
     { pattern: /평등\s*원칙/, issueType: "평등원칙 위반", basis: "헌법 제11조" },
     { pattern: /위헌/, issueType: "위헌 여부", basis: "헌법재판소법 제41조" },
   ],
+  contract_risk: [
+    { pattern: /위약금\s*(?:조항|약정)/, issueType: "위약금 조항 유효성", basis: "민법 제398조" },
+    { pattern: /면책\s*(?:조항|약관)/, issueType: "면책 조항 유효성", basis: "약관규제법 제7조" },
+    { pattern: /기한\s*이익\s*상실/, issueType: "기한이익 상실 여부", basis: "민법 제388조" },
+    { pattern: /자동\s*갱신/, issueType: "계약 자동갱신 조항", basis: "민법 제639조" },
+  ],
+  statutory: [
+    { pattern: /위임\s*범위/, issueType: "위임 범위 초과 여부", basis: "행정기본법 제40조" },
+    { pattern: /소급\s*적용/, issueType: "소급 적용 위헌성", basis: "헌법 제13조" },
+  ],
+};
+
+const LEGAL_CONCEPT_MAP: Record<string, string> = {
+  계약: "계약 효력·이행 쟁점",
+  손해: "손해배상 범위 쟁점",
+  책임: "책임 귀속 쟁점",
+  시효: "소멸시효 완성 여부",
+  임대: "임대차 관계 쟁점",
+  대금: "대금 지급 쟁점",
+  해제: "계약 해제 가부",
+  부당: "부당이득 반환 쟁점",
+  점유: "점유권 쟁점",
+  등기: "소유권 이전 등기 쟁점",
+  채무불이행: "채무불이행 책임 쟁점",
+  불법행위: "불법행위 성립 쟁점",
 };
 
 /**
@@ -90,9 +115,16 @@ function getPatternsForType(docType: LegalDocumentType): typeof ISSUE_KEYWORD_PA
       patterns.push(...ISSUE_KEYWORD_PATTERNS.criminal);
       patterns.push(...ISSUE_KEYWORD_PATTERNS.admin);
       break;
+    case "contract":
+      patterns.push(...ISSUE_KEYWORD_PATTERNS.contract_risk);
+      break;
+    case "statute":
+      patterns.push(...ISSUE_KEYWORD_PATTERNS.statutory);
+      break;
     case "brief":
       patterns.push(...ISSUE_KEYWORD_PATTERNS.criminal);
       patterns.push(...ISSUE_KEYWORD_PATTERNS.admin);
+      patterns.push(...ISSUE_KEYWORD_PATTERNS.contract_risk);
       break;
   }
 
@@ -192,11 +224,13 @@ function detectByKeywords(text: string, docType: LegalDocumentType): DetectedIss
  * 그래프 클러스터에서 쟁점 탐지
  */
 function detectByClusters(clusters: TopicCluster[]): DetectedIssue[] {
+  const maxCentrality = Math.max(...clusters.map((cluster) => cluster.centrality), 0.001);
+
   return clusters.slice(0, 5).map((cluster, i) => ({
     id: `cl-${i}`,
-    title: cluster.name || `법률 논점 ${i + 1}`,
+    title: mapClusterToIssue(cluster.name || `법률 논점 ${i + 1}`),
     description: `주요 개념: ${cluster.nodes.slice(0, 4).join(", ")}`,
-    confidence: cluster.centrality ?? 0.5,
+    confidence: Math.min(0.9, ((cluster.centrality ?? 0.1) / maxCentrality) * 0.7 + 0.2),
     sources: ["graph_cluster" as IssueSource],
     relatedClusters: [cluster.name],
   }));
@@ -233,4 +267,11 @@ function enrichWithEntities(issues: DetectedIssue[], entities: ExtractionResult)
       }
     }
   }
+}
+
+function mapClusterToIssue(clusterName: string): string {
+  const matched = Object.entries(LEGAL_CONCEPT_MAP).find(
+    ([keyword]) => clusterName.includes(keyword) || keyword.includes(clusterName)
+  );
+  return matched?.[1] ?? `"${clusterName}" 관련 법률 쟁점`;
 }

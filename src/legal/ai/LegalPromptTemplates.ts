@@ -94,6 +94,10 @@ function buildContextInfo(params: PromptParams): string {
     );
   }
 
+  if (params.additionalContext?.trim()) {
+    lines.push(`\n외부 법령·판례 참고정보:\n${params.additionalContext.trim()}`);
+  }
+
   return lines.join("\n");
 }
 

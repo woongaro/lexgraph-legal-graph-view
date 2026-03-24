@@ -2,11 +2,11 @@
 // InfraNodus 의존성 없이 완전 로컬 동작
 
 import { getLegalStopwords } from "../legal/preprocessor/KoreanLegalStopwords";
+import { splitLegalCompound } from "../legal/preprocessor/KoreanLegalCompounds";
 import type { GraphNode, GraphEdge, TopicCluster, StructuralGap, LocalGraphResult } from "./types";
 
 const MAX_NODES = 80;
 const WINDOW_SIZE = 4;
-const MIN_EDGE_WEIGHT = 2;
 const MAX_ITER_LABEL_PROP = 15;
 
 const CLUSTER_COLORS = [
@@ -21,6 +21,20 @@ export interface GraphBuildOptions {
   minEdgeWeight?: number;
 }
 
+export function extractTopKeywords(text: string, maxKeywords = 12): string[] {
+  const tokens = tokenize(text);
+  const frequencies = new Map<string, number>();
+
+  for (const token of tokens) {
+    frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
+  }
+
+  return [...frequencies.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxKeywords)
+    .map(([keyword]) => keyword);
+}
+
 /**
  * 텍스트에서 로컬 지식 그래프 생성
  */
@@ -30,10 +44,10 @@ export function buildLocalGraph(
 ): LocalGraphResult {
   const maxNodes = options.maxNodes ?? MAX_NODES;
   const windowSize = options.windowSize ?? WINDOW_SIZE;
-  const minEdgeWeight = options.minEdgeWeight ?? MIN_EDGE_WEIGHT;
 
   const tokens = tokenize(text);
   if (tokens.length < 5) return emptyResult();
+  const minEdgeWeight = options.minEdgeWeight ?? Math.max(1, Math.floor(tokens.length / 300));
 
   // 1. 단어 빈도
   const wordFreq = new Map<string, number>();
@@ -159,17 +173,46 @@ export function buildLocalGraph(
 const LEGAL_STOPWORDS = getLegalStopwords("standard");
 
 function tokenize(text: string): string[] {
-  // 숫자·특수문자 제거, 한글만 유지
-  const cleaned = text
-    .replace(/[0-9]+/g, " ")
-    .replace(/[^\uAC00-\uD7AF\uA960-\uA97F\u1100-\u11FF\s]/g, " ");
+  const preservedCaseNumbers = text.match(/\d{4}[가-힣]{1,5}\d+/g) ?? [];
+  const preservedArticles = [...text.matchAll(/제\s*(\d+)\s*조/g)].map((match) => `제${match[1]}조`);
 
+  const cleaned = text
+    .replace(/\d{4}[가-힣]{1,5}\d+/g, " ")
+    .replace(/제\s*(\d+)\s*조/g, " ")
+    .replace(/[0-9]+/g, " ")
+    .replace(/[^\uAC00-\uD7AF\uA960-\uA97F\u1100-\u11FFa-zA-Z\s]/g, " ");
+
+  const tokens = tokenizeWithBigrams(cleaned);
+  return [...tokens, ...preservedCaseNumbers, ...preservedArticles].filter(
+    (token) => token.length >= 2 && !LEGAL_STOPWORDS.has(token)
+  );
+}
+
+function tokenizeWithBigrams(text: string): string[] {
   const tokens: string[] = [];
-  for (const word of cleaned.split(/\s+/)) {
-    if (word.length >= 2 && !LEGAL_STOPWORDS.has(word)) {
-      tokens.push(word);
+
+  for (const word of text.split(/\s+/)) {
+    const cleanedWord = word.trim();
+    if (cleanedWord.length < 2) continue;
+    if (!LEGAL_STOPWORDS.has(cleanedWord)) tokens.push(cleanedWord);
+
+    const compoundParts = splitLegalCompound(cleanedWord);
+    for (const part of compoundParts) {
+      if (part.length >= 2 && !LEGAL_STOPWORDS.has(part)) {
+        tokens.push(part);
+      }
+    }
+
+    if (cleanedWord.length >= 4 && /^[가-힣]+$/.test(cleanedWord)) {
+      for (let i = 0; i <= cleanedWord.length - 2; i++) {
+        const gram = cleanedWord.slice(i, i + 2);
+        if (!LEGAL_STOPWORDS.has(gram)) {
+          tokens.push(gram);
+        }
+      }
     }
   }
+
   return tokens;
 }
 
@@ -181,13 +224,11 @@ function labelPropagation(
 ): Map<string, number> {
   const labels = new Map<string, number>();
   words.forEach((w, i) => labels.set(w, i));
+  const seed = createDeterministicSeed(words, adjacency);
 
   for (let iter = 0; iter < MAX_ITER_LABEL_PROP; iter++) {
     let changed = false;
-    // 결정론적 셔플 (iter 기반)
-    const shuffled = [...words].sort(
-      (a, b) => Math.sin((iter + 1) * (a.charCodeAt(0) + b.charCodeAt(0))) - 0.5
-    );
+    const shuffled = deterministicShuffle(words, seed + iter * 97);
 
     for (const word of shuffled) {
       const neighbors = adjacency.get(word);
@@ -219,6 +260,46 @@ function labelPropagation(
   const result = new Map<string, number>();
   for (const [w, l] of labels) result.set(w, remap.get(l) ?? 0);
   return result;
+}
+
+function createDeterministicSeed(
+  words: string[],
+  adjacency: Map<string, Set<string>>
+): number {
+  let hash = 2166136261;
+  const entries = [...words].sort();
+
+  for (const word of entries) {
+    for (let i = 0; i < word.length; i++) {
+      hash ^= word.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    const degree = adjacency.get(word)?.size ?? 0;
+    hash ^= degree;
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+function deterministicShuffle(words: string[], seed: number): string[] {
+  const shuffled = [...words];
+  const random = createSeededRandom(seed);
+
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  return shuffled;
+}
+
+function createSeededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
 }
 
 // ── 구조적 갭 탐지 ───────────────────────────────────────

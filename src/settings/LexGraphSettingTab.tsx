@@ -91,6 +91,31 @@ export class LexGraphSettingTab extends PluginSettingTab {
         );
     }
 
+    new Setting(containerEl)
+      .setName("AI 기반 그래프 생성")
+      .setDesc("AI가 법률 개념 관계 그래프를 직접 추출합니다. API 호출 비용이 발생할 수 있습니다.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.AI_GRAPH_ENABLED)
+          .onChange(async (value) => {
+            await this.plugin.saveSettings({ AI_GRAPH_ENABLED: value });
+            this.display();
+          })
+      );
+
+    if (this.plugin.settings.AI_GRAPH_ENABLED) {
+      new Setting(containerEl)
+        .setName("AI 그래프 실패 시 로컬 그래프 사용")
+        .setDesc("AI 응답이 실패하거나 JSON 파싱이 불가능하면 기존 공출현 그래프로 자동 전환합니다.")
+        .addToggle((toggle) =>
+          toggle
+            .setValue(this.plugin.settings.AI_GRAPH_FALLBACK)
+            .onChange(async (value) => {
+              await this.plugin.saveSettings({ AI_GRAPH_FALLBACK: value });
+            })
+        );
+    }
+
     // ── 법률 특화 설정 ──────────────────────────────────
     containerEl.createEl("h3", { text: "법률 분석 설정" });
 
@@ -168,7 +193,7 @@ export class LexGraphSettingTab extends PluginSettingTab {
 
       new Setting(containerEl)
         .setName("판례 인용 연결")
-        .setDesc("판례 번호를 대법원 종합법률정보와 연결합니다.")
+        .setDesc("판례 번호를 외부 판례 링크와 연결합니다.")
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.LEGAL_CITATION_LINK)
@@ -198,6 +223,45 @@ export class LexGraphSettingTab extends PluginSettingTab {
               await this.plugin.saveSettings({ LEGAL_EVIDENCE_MATRIX_ENABLED: value });
             })
         );
+
+      new Setting(containerEl)
+        .setName("당사자 관계도")
+        .setDesc("당사자 간 법률 관계를 시각화합니다.")
+        .addToggle((toggle) =>
+          toggle
+            .setValue(this.plugin.settings.LEGAL_PARTY_GRAPH_ENABLED)
+            .onChange(async (value) => {
+              await this.plugin.saveSettings({ LEGAL_PARTY_GRAPH_ENABLED: value });
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("국가법령정보 Open API 연동")
+        .setDesc("법령 조문과 판례 정보를 국가법령정보 Open API로 조회합니다.")
+        .addToggle((toggle) =>
+          toggle
+            .setValue(this.plugin.settings.LEGAL_DB_INTEGRATION === "enabled")
+            .onChange(async (value) => {
+              await this.plugin.saveSettings({
+                LEGAL_DB_INTEGRATION: value ? "enabled" : "disabled",
+              });
+              this.display();
+            })
+        );
+
+      if (this.plugin.settings.LEGAL_DB_INTEGRATION === "enabled") {
+        new Setting(containerEl)
+          .setName("Open API 요청변수 OC")
+          .setDesc("필수값. 사용자 이메일의 ID를 입력하세요. 예: g4c@korea.kr 이면 OC는 g4c")
+          .addText((text) =>
+            text
+              .setPlaceholder("g4c")
+              .setValue(this.plugin.settings.LEGAL_OPEN_API_OC)
+              .onChange(async (value) => {
+                await this.plugin.saveSettings({ LEGAL_OPEN_API_OC: value.trim() });
+              })
+          );
+      }
     }
 
     // ── 그래프 표시 설정 ────────────────────────────────
@@ -231,6 +295,19 @@ export class LexGraphSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             await this.plugin.saveSettings({
               RELOADING_GRAPH: value as LexGraphSettings["RELOADING_GRAPH"],
+            });
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("그래프 상태 저장")
+      .setDesc("문서별 노드 위치, 줌/패닝, 수동 증거/사실 입력을 플러그인 데이터에 저장합니다.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.GRAPH_STATE_PERSISTENCE_ENABLED)
+          .onChange(async (value) => {
+            await this.plugin.saveSettings({
+              GRAPH_STATE_PERSISTENCE_ENABLED: value,
             });
           })
       );

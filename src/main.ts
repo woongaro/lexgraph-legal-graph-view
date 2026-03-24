@@ -6,15 +6,25 @@ import {
   MarkdownView,
   Notice,
   addIcon,
-  Platform,
   TFile,
 } from "obsidian";
+import type { Extension } from "@codemirror/state";
 
 import { DEFAULT_SETTINGS, type LexGraphSettings } from "./settings/LexGraphSettings";
 import { LexGraphSettingTab } from "./settings/LexGraphSettingTab";
 import { LexGraphView, LEXGRAPH_VIEW_TYPE } from "./views/LexGraphView";
 import { preprocessLegalText } from "./legal/preprocessor/LegalTextPreprocessor";
 import { openGraphSideView } from "./utils/graphUtils";
+import { linkifyCaseCitations } from "./legal/utils/CitationLinking";
+import { createLegalHighlightExtension } from "./editor/LegalHighlightExtension";
+import {
+  clonePersistedDocumentState,
+  mergePersistedDocumentState,
+  prunePersistedDocuments,
+  readPluginData,
+  type PersistedDocumentState,
+  type PersistedDocumentStateInput,
+} from "./state/PersistedGraphState";
 
 // 플러그인 내 커스텀 이벤트 이름
 const EVENT_SAVE_SETTINGS = "lexgraphSaveSettings";
@@ -45,6 +55,9 @@ export default class LexGraphPlugin extends Plugin {
   settings!: LexGraphSettings;
 
   private onSettingsSaveEvent!: EventListener;
+  private editorExtensions: Extension[] = [];
+  private persistedDocuments: Record<string, PersistedDocumentState> = {};
+  private persistDataTimer: ReturnType<typeof setTimeout> | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -57,6 +70,8 @@ export default class LexGraphPlugin extends Plugin {
 
     // 그래프 뷰 타입 등록
     this.registerView(LEXGRAPH_VIEW_TYPE, (leaf) => new LexGraphView(leaf, this));
+    this.registerEditorExtension(this.editorExtensions);
+    this.syncEditorExtensions(true);
 
     // 설정 저장 이벤트 리스너
     this.onSettingsSaveEvent = (async (event: Event) => {
@@ -79,6 +94,14 @@ export default class LexGraphPlugin extends Plugin {
 
     // 커맨드 팔레트 명령 등록
     this.registerCommands();
+
+    this.registerMarkdownPostProcessor((el) => {
+      if (!this.settings.LEGAL_CITATION_LINK) return;
+      void linkifyCaseCitations(el, {
+        oc: this.settings.LEGAL_OPEN_API_OC,
+        enablePreview: this.settings.LEGAL_DB_INTEGRATION === "enabled",
+      });
+    });
 
     // active-leaf-change 이벤트 — 자동 그래프 업데이트
     this.registerEvent(
@@ -104,24 +127,91 @@ export default class LexGraphPlugin extends Plugin {
 
   onunload(): void {
     document.removeEventListener(EVENT_SAVE_SETTINGS, this.onSettingsSaveEvent);
+    if (this.persistDataTimer) {
+      clearTimeout(this.persistDataTimer);
+      this.persistDataTimer = null;
+    }
+    void this.persistPluginData();
   }
 
   /**
    * 설정 로드
    */
   async loadSettings(): Promise<void> {
-    const saved = await this.loadData();
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    const saved = readPluginData(await this.loadData());
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved.settings);
+    this.persistedDocuments = saved.persistedDocuments;
+
+    const legacyOc =
+      typeof (saved.settings as any)?.LEGAL_MOJ_API_KEY === "string"
+        ? (saved.settings as any).LEGAL_MOJ_API_KEY.trim()
+        : "";
+    if (!this.settings.LEGAL_OPEN_API_OC && legacyOc) {
+      this.settings.LEGAL_OPEN_API_OC = legacyOc;
+    }
   }
 
   /**
    * 설정 저장
    */
   async saveSettings(newSettings?: Partial<LexGraphSettings>): Promise<void> {
+    const shouldSyncEditorExtensions = !!newSettings && "LEGAL_ENTITY_HIGHLIGHT" in newSettings;
     if (newSettings) {
       this.settings = Object.assign(this.settings, newSettings);
     }
-    await this.saveData(this.settings);
+    await this.persistPluginData();
+    if (shouldSyncEditorExtensions) {
+      this.syncEditorExtensions(true);
+    }
+  }
+
+  getPersistedDocumentState(sourceKey: string): PersistedDocumentState | undefined {
+    if (!this.settings.GRAPH_STATE_PERSISTENCE_ENABLED) return undefined;
+    return clonePersistedDocumentState(this.persistedDocuments[sourceKey]);
+  }
+
+  queuePersistedDocumentState(sourceKey: string, nextState: PersistedDocumentStateInput): void {
+    if (!this.settings.GRAPH_STATE_PERSISTENCE_ENABLED) return;
+    if (!sourceKey) return;
+    this.persistedDocuments[sourceKey] = mergePersistedDocumentState(
+      this.persistedDocuments[sourceKey],
+      nextState
+    );
+    this.persistedDocuments = prunePersistedDocuments(this.persistedDocuments);
+    this.schedulePersistPluginData();
+  }
+
+  async clearPersistedDocumentState(sourceKey: string): Promise<void> {
+    if (!sourceKey) return;
+    delete this.persistedDocuments[sourceKey];
+    await this.persistPluginData();
+  }
+
+  private schedulePersistPluginData(delay = 250): void {
+    if (this.persistDataTimer) {
+      clearTimeout(this.persistDataTimer);
+    }
+    this.persistDataTimer = setTimeout(() => {
+      this.persistDataTimer = null;
+      void this.persistPluginData();
+    }, delay);
+  }
+
+  private async persistPluginData(): Promise<void> {
+    await this.saveData({
+      settings: this.settings,
+      persistedDocuments: this.persistedDocuments,
+    });
+  }
+
+  private syncEditorExtensions(refreshEditors: boolean): void {
+    this.editorExtensions.length = 0;
+    if (this.settings.LEGAL_ENTITY_HIGHLIGHT) {
+      this.editorExtensions.push(createLegalHighlightExtension());
+    }
+    if (refreshEditors) {
+      this.app.workspace.updateOptions();
+    }
   }
 
   /**
@@ -255,6 +345,36 @@ export default class LexGraphPlugin extends Plugin {
         }
         const graphView = graphLeaves[0].view as LexGraphView;
         await graphView.runLegalAnalysis("brief_outline");
+      },
+    });
+
+    this.addCommand({
+      id: "save-analysis-to-note",
+      name: "현재 분석 결과를 노트로 저장",
+      callback: async () => {
+        const graphLeaves = this.app.workspace.getLeavesOfType(LEXGRAPH_VIEW_TYPE);
+        if (graphLeaves.length === 0) {
+          new Notice("그래프 뷰가 열려있지 않습니다.");
+          return;
+        }
+        const graphView = graphLeaves[0].view as LexGraphView;
+        await graphView.saveAnalysisToNote();
+      },
+    });
+
+    this.addCommand({
+      id: "clear-current-persisted-state",
+      name: "현재 문서의 저장된 그래프 상태 초기화",
+      callback: async () => {
+        const graphLeaves = this.app.workspace.getLeavesOfType(LEXGRAPH_VIEW_TYPE);
+        const graphView = graphLeaves[0]?.view as LexGraphView | undefined;
+        const sourceKey = graphView?.getPersistenceKey();
+        if (!sourceKey) {
+          new Notice("초기화할 저장 상태가 없습니다.");
+          return;
+        }
+        await this.clearPersistedDocumentState(sourceKey);
+        new Notice("저장된 그래프 상태를 초기화했습니다. 그래프를 다시 열어주세요.");
       },
     });
 

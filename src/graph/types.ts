@@ -9,6 +9,7 @@ export interface GraphNode {
   color?: string;
   community?: number;
   centrality?: number;
+  nodeType?: "issue" | "fact" | "law" | "party" | "evidence" | "concept" | "document";
 }
 
 export interface GraphEdge {
@@ -16,11 +17,35 @@ export interface GraphEdge {
   source: string;
   target: string;
   weight?: number;
+  label?: string;
 }
 
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
+}
+
+export interface GraphPoint {
+  x: number;
+  y: number;
+}
+
+export interface GraphViewportState {
+  scale: number;
+  tx: number;
+  ty: number;
+}
+
+export interface GraphCanvasSize {
+  width: number;
+  height: number;
+}
+
+export interface GraphLayoutState {
+  graphKey: string;
+  positions: Record<string, GraphPoint>;
+  viewport: GraphViewportState;
+  canvasSize: GraphCanvasSize;
 }
 
 /**

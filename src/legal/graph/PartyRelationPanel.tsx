@@ -1,7 +1,7 @@
 // 당사자 관계도 패널
 // 법률 문서의 당사자들 간의 법률적 관계를 시각화
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { PartyInfo } from "../preprocessor/LegalEntityExtractor";
 
 /**
@@ -91,6 +91,15 @@ export function PartyRelationPanel({
         </div>
       )}
 
+      {relations.length > 0 && (
+        <div className="rounded border border-gray-200 dark:border-gray-700 p-2">
+          <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+            관계도
+          </div>
+          <RelationGraph nodes={nodes} relations={relations} />
+        </div>
+      )}
+
       {/* 당사자 대립 구조 */}
       <div className="relative">
         {/* 원고측 */}
@@ -152,7 +161,7 @@ export function PartyRelationPanel({
 
       {/* 선택된 당사자 상세 */}
       {selectedNode && (
-        <PartyDetail party={selectedNode} relations={relations} allParties={nodes} />
+        <PartyDetail party={selectedNode} relations={relations} />
       )}
 
       {/* 관계 목록 */}
@@ -187,6 +196,98 @@ export function PartyRelationPanel({
 
 // ── 서브 컴포넌트 ────────────────────────────────────────
 
+function RelationGraph({
+  nodes,
+  relations,
+}: {
+  nodes: PartyNode[];
+  relations: PartyRelation[];
+}): React.JSX.Element {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.clientWidth || 280;
+    const height = 180;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const positions: Record<string, { x: number; y: number }> = {};
+    const claimants = nodes.filter((node) => node.side === "claimant");
+    const respondents = nodes.filter((node) => node.side === "respondent");
+    const thirds = nodes.filter((node) => node.side === "third");
+
+    claimants.forEach((node, index) => {
+      positions[node.id] = { x: 56, y: 38 + index * 42 };
+    });
+    respondents.forEach((node, index) => {
+      positions[node.id] = { x: width - 56, y: 38 + index * 42 };
+    });
+    thirds.forEach((node, index) => {
+      positions[node.id] = { x: width / 2, y: height - 30 - index * 34 };
+    });
+
+    for (const relation of relations) {
+      const from = positions[relation.from];
+      const to = positions[relation.to];
+      if (!from || !to) continue;
+
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.strokeStyle = relation.isDisputed ? "#ef4444" : "#3b82f6";
+      ctx.setLineDash(relation.isDisputed ? [5, 3] : []);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(relation.label, (from.x + to.x) / 2, (from.y + to.y) / 2 - 6);
+    }
+
+    for (const node of nodes) {
+      const pos = positions[node.id];
+      if (!pos) continue;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 18, 0, Math.PI * 2);
+      ctx.fillStyle =
+        node.side === "claimant"
+          ? "#dbeafe"
+          : node.side === "respondent"
+          ? "#fee2e2"
+          : "#e5e7eb";
+      ctx.fill();
+      ctx.strokeStyle =
+        node.side === "claimant"
+          ? "#3b82f6"
+          : node.side === "respondent"
+          ? "#ef4444"
+          : "#6b7280";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = "#374151";
+      ctx.font = "9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText((node.name ?? node.role).slice(0, 6), pos.x, pos.y);
+    }
+  }, [nodes, relations]);
+
+  return <canvas ref={canvasRef} className="w-full h-[180px]" />;
+}
+
 function PartyCard({
   party,
   isSelected,
@@ -203,14 +304,6 @@ function PartyCard({
     neutral: "border-l-gray-300",
   }[party.side];
 
-  const typeIcon = {
-    individual: "👤",
-    company: "🏢",
-    government: "🏛️",
-    court: "⚖️",
-    other: "•",
-  }[party.type];
-
   return (
     <div
       className={`
@@ -223,7 +316,7 @@ function PartyCard({
       `}
       onClick={onClick}
     >
-      <span className="text-base">{typeIcon}</span>
+      <PartyTypeBadge type={party.type} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1">
           <span className="text-xs text-gray-500 dark:text-gray-400">{party.role}</span>
@@ -239,14 +332,46 @@ function PartyCard({
   );
 }
 
+function PartyTypeBadge({ type }: { type: PartyNode["type"] }): React.JSX.Element {
+  const config = {
+    individual: {
+      label: "인",
+      className: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+    },
+    company: {
+      label: "법",
+      className: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+    },
+    government: {
+      label: "정",
+      className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+    },
+    court: {
+      label: "법원",
+      className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+    },
+    other: {
+      label: "기",
+      className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+    },
+  }[type];
+
+  return (
+    <span
+      className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none ${config.className}`}
+      aria-hidden="true"
+    >
+      {config.label}
+    </span>
+  );
+}
+
 function PartyDetail({
   party,
   relations,
-  allParties,
 }: {
   party: PartyNode;
   relations: PartyRelation[];
-  allParties: PartyNode[];
 }): React.JSX.Element {
   const relatedRelations = relations.filter(
     (r) => r.from === party.id || r.to === party.id

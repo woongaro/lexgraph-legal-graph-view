@@ -10,13 +10,19 @@ import type { LegalDocumentType, LegalAnalysisMode } from "../settings/LexGraphS
 import type { ExtractionResult } from "../legal/preprocessor/LegalEntityExtractor";
 import type { DocumentMetadata } from "../legal/preprocessor/LegalTextPreprocessor";
 import type { IssueSpotResult } from "../legal/ai/IssueSpotter";
-import type { LocalGraphResult } from "../graph/types";
+import type { GraphLayoutState, LocalGraphResult } from "../graph/types";
+import type { Evidence, FactItem } from "../legal/graph/EvidenceMatrix";
 import { buildLocalGraph } from "../graph/LocalGraphEngine";
 import { callAi, isAiConfigured } from "../ai/LocalAiClient";
 import { buildLegalPrompt } from "../legal/ai/LegalPromptTemplates";
 import { spotIssues } from "../legal/ai/IssueSpotter";
 import { generateCounterArguments, formatCounterAnalysis } from "../legal/ai/CounterArgumentGen";
 import { LexGraphApp } from "../components/LexGraphApp";
+import type { AiGraphResult } from "../graph/AiGraphBuilder";
+import { buildAiGraph, convertAiGraphToLocalGraph } from "../graph/AiGraphBuilder";
+import { MojLawClient } from "../legal/api/MojLawClient";
+import { SupremeCourtClient } from "../legal/api/SupremeCourtClient";
+import { buildFolderGraph, type FolderGraphDocument } from "../graph/FolderGraphBuilder";
 
 export const LEXGRAPH_VIEW_TYPE = "lexgraph-graph-view";
 
@@ -44,7 +50,19 @@ export interface GraphState {
   metadata?: DocumentMetadata | null;
   entities?: ExtractionResult | null;
   aiResult?: string;
+  aiGraphResult?: AiGraphResult;
   lastFilePath?: string;
+  lastRawText?: string;
+  lastSourceLabel?: string;
+  isAiGraph?: boolean;
+  aiGraphMeta?: {
+    summary: string;
+    extractedIssues: string[];
+  };
+  graphLayoutState?: GraphLayoutState;
+  manualEvidence?: Evidence[];
+  manualFacts?: FactItem[];
+  sourceKey?: string;
 }
 
 /**
@@ -98,6 +116,10 @@ export class LexGraphView extends ItemView {
     this.root = null;
   }
 
+  getPersistenceKey(): string | undefined {
+    return this.graphState.sourceKey;
+  }
+
   /**
    * 그래프 리로드 — 외부에서 호출
    */
@@ -109,32 +131,71 @@ export class LexGraphView extends ItemView {
       metadata: params.metadata,
       entities: params.entities,
       lastFilePath: params.filePath,
+      lastSourceLabel: params.sourcePath ?? params.filePath,
     });
 
     try {
-      let text = params.processedText ?? "";
+      const settings = this.plugin.settings;
+      const sourceKey = getPersistenceSourceKey(params);
+      let rawText = params.processedText ?? "";
+      let graphText = params.processedText ?? "";
 
-      if (!text && params.filePath && !params.isFolder) {
+      if (!rawText && params.filePath && !params.isFolder) {
         const file = this.app.vault.getAbstractFileByPath(params.filePath);
         if (file) {
           const { TFile } = await import("obsidian");
           if (file instanceof TFile) {
-            text = await this.app.vault.cachedRead(file);
+            rawText = await this.app.vault.cachedRead(file);
+            const linkedMentions = await this.collectLinkedMentions(file, rawText);
+            if (linkedMentions) {
+              rawText = `${rawText}\n\n---\n\n${linkedMentions}`;
+            }
+            graphText = params.processedText || rawText;
           }
         }
       }
 
-      if (!text && params.isFolder && params.filePath) {
-        text = await this.readFolderContents(params.filePath);
+      if (!rawText && params.isFolder && params.filePath) {
+        rawText = await this.readFolderContents(params.filePath);
+        graphText = rawText;
       }
 
-      if (!text.trim()) {
+      if (settings.SINGLE_PAGE_GRAPH_PROCESSING === "[[Wiki Links]] Only") {
+        graphText = this.extractWikiLinksOnly(rawText || graphText);
+      }
+
+      if (!graphText.trim()) {
         this.updateState({ isLoading: false, error: "분석할 텍스트가 없습니다." });
         return;
       }
 
-      // 로컬 그래프 빌드
-      const graphData = buildLocalGraph(text);
+      let graphData: LocalGraphResult | undefined;
+      let aiGraphResult: AiGraphResult | undefined;
+
+      if (isAiConfigured(settings) && settings.AI_GRAPH_ENABLED) {
+        try {
+          aiGraphResult = await buildAiGraph(
+            rawText || graphText,
+            params.documentType ?? "general",
+            settings
+          );
+          graphData = convertAiGraphToLocalGraph(aiGraphResult);
+        } catch (error) {
+          console.warn("AI graph generation failed:", error);
+          if (!settings.AI_GRAPH_FALLBACK) {
+            throw error;
+          }
+        }
+      }
+
+      if (!graphData && params.isFolder && params.filePath) {
+        const folderGraphDocs = await this.readFolderGraphDocuments(params.filePath);
+        graphData = buildFolderGraph(folderGraphDocs);
+      }
+
+      if (!graphData) {
+        graphData = buildLocalGraph(graphText);
+      }
 
       if (graphData.nodes.length === 0) {
         this.updateState({
@@ -144,10 +205,28 @@ export class LexGraphView extends ItemView {
         return;
       }
 
+      const persistedState = sourceKey
+        ? this.plugin.getPersistedDocumentState(sourceKey)
+        : undefined;
+
       this.updateState({
         isLoading: false,
         graphData,
         documentType: params.documentType ?? "general",
+        aiGraphResult,
+        aiResult: undefined,
+        lastRawText: rawText || graphText,
+        isAiGraph: !!aiGraphResult,
+        aiGraphMeta: aiGraphResult
+          ? {
+              summary: aiGraphResult.summary,
+              extractedIssues: aiGraphResult.issues,
+            }
+          : undefined,
+        graphLayoutState: persistedState?.graphLayoutState,
+        manualEvidence: persistedState?.manualEvidence ?? [],
+        manualFacts: persistedState?.manualFacts ?? [],
+        sourceKey,
       });
 
     } catch (err) {
@@ -167,25 +246,34 @@ export class LexGraphView extends ItemView {
 
     try {
       const lastPath = this.graphState.lastFilePath;
-      if (!lastPath) {
+      const rawTextFromState = this.graphState.lastRawText;
+
+      if (!rawTextFromState && !lastPath) {
         new Notice("먼저 문서를 분석하세요.");
         return;
       }
 
-      const file = this.app.vault.getAbstractFileByPath(lastPath);
-      const { TFile } = await import("obsidian");
-      if (!(file instanceof TFile)) return;
+      let rawText = rawTextFromState ?? "";
+      if (!rawText && lastPath) {
+        const file = this.app.vault.getAbstractFileByPath(lastPath);
+        const { TFile } = await import("obsidian");
+        if (!(file instanceof TFile)) return;
+        rawText = await this.app.vault.cachedRead(file);
+      }
 
-      const rawText = await this.app.vault.cachedRead(file);
       const docType = this.graphState.documentType;
       const entities = this.graphState.entities ?? emptyEntities();
+      const supplementalContext = await this.buildApiSupplementalContext(entities);
+      const analysisText = supplementalContext
+        ? `${rawText}\n\n[국가법령정보 참고]\n${supplementalContext}`
+        : rawText;
       const graphData = this.graphState.graphData;
       const clusters = graphData?.clusters ?? [];
       const gaps = graphData?.gaps ?? [];
 
       // 쟁점 탐지: 로컬 처리
       if (mode === "issue_spotting") {
-        const result = spotIssues(rawText, docType, clusters, gaps, entities);
+        const result = spotIssues(analysisText, docType, clusters, gaps, entities);
         this.updateState({ aiResult: formatIssueSpotResult(result) });
         new Notice(`쟁점 ${result.issues.length}개 탐지 완료`);
         return;
@@ -193,7 +281,7 @@ export class LexGraphView extends ItemView {
 
       // 반박 논거: 로컬 처리
       if (mode === "counter_argument") {
-        const issueResult = spotIssues(rawText, docType, clusters, gaps, entities);
+        const issueResult = spotIssues(analysisText, docType, clusters, gaps, entities);
         const counterResult = generateCounterArguments(issueResult.issues, clusters, gaps, entities);
         this.updateState({ aiResult: formatCounterAnalysis(counterResult) });
         new Notice("반박 논거 분석 완료");
@@ -208,7 +296,7 @@ export class LexGraphView extends ItemView {
       }
 
       // 그래프 없으면 빌드
-      const activeGraphData = graphData ?? buildLocalGraph(rawText);
+      const activeGraphData = graphData ?? buildLocalGraph(analysisText);
       const topNodes = activeGraphData.topNodes;
 
       const promptResult = buildLegalPrompt({
@@ -218,6 +306,7 @@ export class LexGraphView extends ItemView {
         clusters: activeGraphData.clusters,
         gaps: activeGraphData.gaps,
         entities,
+        additionalContext: supplementalContext,
       });
 
       const aiText = await callAi(
@@ -233,6 +322,57 @@ export class LexGraphView extends ItemView {
       const message = err instanceof Error ? err.message : "분석 실패";
       new Notice(`AI 분석 오류: ${message}`);
     }
+  }
+
+  private async buildApiSupplementalContext(entities: ExtractionResult): Promise<string> {
+    const settings = this.plugin.settings;
+    if (settings.LEGAL_DB_INTEGRATION !== "enabled") return "";
+    const oc = settings.LEGAL_OPEN_API_OC.trim();
+    if (!oc) return "";
+
+    const lawClient = new MojLawClient(oc);
+    const caseClient = new SupremeCourtClient(oc);
+
+    const statuteTargets = entities.statutes
+      .filter((statute) => statute.lawName && statute.lawName !== "미상")
+      .filter((statute, index, arr) =>
+        arr.findIndex((target) => `${target.lawName}:${target.articleNumber}` === `${statute.lawName}:${statute.articleNumber}`) === index
+      )
+      .slice(0, 2);
+
+    const caseTargets = entities.citations
+      .map((citation) => citation.caseNumber)
+      .filter(Boolean)
+      .filter((caseNumber, index, arr) => arr.indexOf(caseNumber) === index)
+      .slice(0, 2);
+
+    const lawTexts = await Promise.all(
+      statuteTargets.map(async (statute) => {
+        try {
+          const article = await lawClient.getArticle(statute.lawName, `제${statute.articleNumber}조`);
+          if (!article) return "";
+          const firstParagraph = article.paragraphs[0]?.content ?? "";
+          return `[법령] ${statute.lawName} 제${statute.articleNumber}조: ${firstParagraph}`;
+        } catch {
+          return "";
+        }
+      })
+    );
+
+    const caseTexts = await Promise.all(
+      caseTargets.map(async (caseNumber) => {
+        try {
+          const detail = await caseClient.getCaseDetail(caseNumber);
+          if (!detail) return "";
+          const holding = detail.holdings?.[0] || detail.reasoning || "";
+          return `[판례] ${detail.caseNumber} ${detail.title}: ${holding.slice(0, 220)}`;
+        } catch {
+          return "";
+        }
+      })
+    );
+
+    return [...lawTexts, ...caseTexts].filter(Boolean).join("\n");
   }
 
   /**
@@ -254,6 +394,122 @@ export class LexGraphView extends ItemView {
     }
 
     return contents.join("\n\n---\n\n");
+  }
+
+  private async readFolderGraphDocuments(folderPath: string): Promise<FolderGraphDocument[]> {
+    const folder = this.app.vault.getAbstractFileByPath(folderPath);
+    if (!folder) return [];
+
+    const { TFolder, TFile } = await import("obsidian");
+    if (!(folder instanceof TFolder)) return [];
+
+    const docs: FolderGraphDocument[] = [];
+    for (const child of folder.children) {
+      if (!(child instanceof TFile) || child.extension !== "md") continue;
+      const content = await this.app.vault.cachedRead(child);
+      const links = this.app.metadataCache.getFileCache(child)?.links?.map((link) => link.link) ?? [];
+      docs.push({
+        id: child.path,
+        title: child.basename,
+        content,
+        links,
+      });
+    }
+
+    return docs;
+  }
+
+  async saveAnalysisToNote(): Promise<void> {
+    const {
+      aiResult,
+      aiGraphResult,
+      graphData,
+      lastSourceLabel,
+      lastFilePath,
+      documentType,
+      manualEvidence = [],
+      manualFacts = [],
+    } = this.graphState;
+    const markdown = aiResult || formatAiGraphSummary(aiGraphResult);
+
+    if (!markdown) {
+      new Notice("저장할 분석 결과가 없습니다.");
+      return;
+    }
+
+    const sourceLabel = lastSourceLabel ?? lastFilePath ?? "문서";
+    const baseName = stripExtension(sourceLabel.split("/").pop() ?? sourceLabel);
+    const date = new Date();
+    const dateLabel = date.toLocaleDateString("ko-KR");
+    const fileName = `${baseName} - LexGraph분석 ${dateLabel}.md`;
+    const content = [
+      `# ${stripExtension(fileName)}`,
+      "",
+      `> 분석 일시: ${date.toLocaleString("ko-KR")}`,
+      `> 원본: ${sourceLabel}`,
+      `> 문서 유형: ${documentType}`,
+      "",
+      markdown,
+      "",
+      ...(manualEvidence.length > 0
+        ? [
+            "## 수동 추가 증거",
+            ...manualEvidence.map((item) => `- ${item.name}${item.description ? `: ${item.description}` : ""}`),
+            "",
+          ]
+        : []),
+      ...(manualFacts.length > 0
+        ? [
+            "## 수동 추가 사실",
+            ...manualFacts.map((item) => `- ${item.description}`),
+            "",
+          ]
+        : []),
+      "---",
+      "",
+      "## 그래프 통계",
+      `- 노드: ${graphData?.stats.nodeCount ?? 0}개`,
+      `- 엣지: ${graphData?.stats.edgeCount ?? 0}개`,
+      `- 클러스터: ${graphData?.stats.clusterCount ?? 0}개`,
+      `- 그래프 밀도: ${graphData?.stats.density ?? 0}`,
+    ].join("\n");
+
+    try {
+      await this.app.vault.create(fileName, content);
+      new Notice(`분석 결과 저장 완료: ${fileName}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "동일한 이름의 파일이 이미 존재합니다.";
+      new Notice(`저장 실패: ${message}`);
+    }
+  }
+
+  private extractWikiLinksOnly(text: string): string {
+    const wikiLinks = text.match(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g) ?? [];
+    return wikiLinks
+      .map((link) => {
+        const inner = link.slice(2, -2);
+        return inner.includes("|") ? inner.split("|")[0] : inner;
+      })
+      .join(" ");
+  }
+
+  private async collectLinkedMentions(file: import("obsidian").TFile, currentContent: string): Promise<string> {
+    const mode = this.plugin.settings.INCLUDE_LINKED_MENTIONS;
+    if (mode === "Never") return "";
+    if (mode === "For empty pages only" && currentContent.trim().length > 100) return "";
+
+    const links = this.app.metadataCache.getFileCache(file)?.links ?? [];
+    const contents: string[] = [];
+    const { TFile } = await import("obsidian");
+
+    for (const link of links.slice(0, 10)) {
+      const linked = this.app.metadataCache.getFirstLinkpathDest(link.link, file.path);
+      if (linked instanceof TFile) {
+        contents.push(await this.app.vault.cachedRead(linked));
+      }
+    }
+
+    return contents.join("\n\n");
   }
 
   /**
@@ -301,4 +557,30 @@ function formatIssueSpotResult(result: IssueSpotResult): string {
   }
 
   return lines.join("\n");
+}
+
+function formatAiGraphSummary(result?: AiGraphResult): string {
+  if (!result) return "";
+
+  const lines = ["## AI 그래프 요약", ""];
+  if (result.summary) {
+    lines.push(result.summary, "");
+  }
+  if (result.issues.length > 0) {
+    lines.push("### 핵심 쟁점");
+    result.issues.forEach((issue, index) => lines.push(`${index + 1}. ${issue}`));
+    lines.push("");
+  }
+  lines.push(`- 노드: ${result.nodes.length}개`);
+  lines.push(`- 엣지: ${result.edges.length}개`);
+  return lines.join("\n");
+}
+
+function stripExtension(value: string): string {
+  return value.replace(/\.md$/i, "");
+}
+
+function getPersistenceSourceKey(params: GraphLoadParams): string | undefined {
+  if (params.filePath) return params.filePath;
+  return undefined;
 }

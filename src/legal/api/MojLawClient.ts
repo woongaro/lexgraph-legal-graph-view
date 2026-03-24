@@ -57,7 +57,7 @@ export interface LawContent {
 // ── API 클라이언트 ──────────────────────────────────────
 
 const MOJ_API_BASE = "https://www.law.go.kr/DRF";
-const DEFAULT_OC = "test"; // 공개 테스트 계정 (실제 사용 시 발급된 ID 필요)
+const DEFAULT_OC = "test";
 
 /**
  * 법제처 API 클라이언트
@@ -66,8 +66,8 @@ const DEFAULT_OC = "test"; // 공개 테스트 계정 (실제 사용 시 발급�
 export class MojLawClient {
   private readonly oc: string;
 
-  constructor(apiKey?: string) {
-    this.oc = apiKey || DEFAULT_OC;
+  constructor(oc?: string) {
+    this.oc = oc?.trim() || DEFAULT_OC;
   }
 
   /**
@@ -80,10 +80,7 @@ export class MojLawClient {
     url.searchParams.set("type", "JSON");
     url.searchParams.set("query", query);
 
-    const response = await fetch(url.toString());
-    if (!response.ok) throw new Error(`법제처 API 오류: ${response.status}`);
-
-    const data = await response.json() as MojSearchResponse;
+    const data = await fetchLawOpenData(url.toString(), "법령 목록") as MojSearchResponse;
     return this.parseSearchResults(data);
   }
 
@@ -97,10 +94,7 @@ export class MojLawClient {
     url.searchParams.set("type", "JSON");
     url.searchParams.set("ID", lawId);
 
-    const response = await fetch(url.toString());
-    if (!response.ok) return null;
-
-    const data = await response.json() as MojLawResponse;
+    const data = await fetchLawOpenData(url.toString(), "법령 본문") as MojLawResponse;
     return this.parseLawContent(data, lawId);
   }
 
@@ -202,6 +196,23 @@ export class MojLawClient {
       content: raw.호내용 ?? "",
     }));
   }
+}
+
+async function fetchLawOpenData(url: string, resourceLabel: string): Promise<unknown> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`${resourceLabel} 조회 실패: HTTP ${response.status}`);
+  }
+
+  const data = await response.json() as Record<string, unknown>;
+  const resultMessage = typeof data.result === "string" ? data.result : "";
+  const message = typeof data.msg === "string" ? data.msg : "";
+
+  if (resultMessage || message) {
+    throw new Error(`${resourceLabel} 조회 실패: ${message || resultMessage}`);
+  }
+
+  return data;
 }
 
 // ── 타입 정의 (API 응답 구조) ──────────────────────────

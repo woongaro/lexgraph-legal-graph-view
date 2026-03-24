@@ -17,7 +17,23 @@ export interface IssueNode {
   strength?: "strong" | "medium" | "weak"; // 논거 강도
   children?: IssueNode[];
   isGap?: boolean;              // 논리 공백 여부
+  relatedNodeIds?: string[];
 }
+
+const LEGAL_CONCEPT_MAP: Record<string, string> = {
+  계약: "계약 효력·이행 쟁점",
+  손해: "손해배상 범위 쟁점",
+  책임: "책임 귀속 쟁점",
+  시효: "소멸시효 완성 여부",
+  임대: "임대차 관계 쟁점",
+  대금: "대금 지급 쟁점",
+  해제: "계약 해제 가부",
+  부당: "부당이득 반환 쟁점",
+  점유: "점유권 쟁점",
+  등기: "소유권 이전 등기 쟁점",
+  불법행위: "불법행위 성립 쟁점",
+  채무불이행: "채무불이행 책임 쟁점",
+};
 
 /**
  * 그래프 데이터에서 쟁점 트리 생성
@@ -27,17 +43,21 @@ export function buildIssueTree(
   gaps: StructuralGap[],
   aiResult?: string
 ): IssueNode[] {
+  const maxCentrality = Math.max(...clusters.map((cluster) => cluster.centrality), 0.001);
+
   // 클러스터 → 쟁점 변환
   const mainIssues: IssueNode[] = clusters.slice(0, 5).map((cluster, i) => ({
     id: `issue-${i}`,
-    title: cluster.name || `쟁점 ${i + 1}`,
+    title: mapClusterToIssue(cluster.name || `쟁점 ${i + 1}`),
     description: `관련 개념: ${cluster.nodes.slice(0, 4).join(", ")}`,
     level: "main" as const,
-    strength: cluster.centrality > 0.3 ? "strong" : cluster.centrality > 0.1 ? "medium" : "weak",
+    strength: normalizeStrength(cluster.centrality, maxCentrality),
+    relatedNodeIds: cluster.nodes,
     children: cluster.nodes.slice(0, 3).map((node, j) => ({
       id: `issue-${i}-sub-${j}`,
       title: node,
       level: "sub" as const,
+      relatedNodeIds: [node],
     })),
   }));
 
@@ -49,6 +69,7 @@ export function buildIssueTree(
     level: "main" as const,
     isGap: true,
     strength: "weak",
+    relatedNodeIds: gap.between,
   }));
 
   return [...mainIssues, ...gapIssues];
@@ -110,10 +131,10 @@ export function IssueTreePanel({
           <IssueNodeItem
             key={issue.id}
             issue={issue}
-            isExpanded={expanded.has(issue.id)}
-            isSelected={selected === issue.id}
-            onToggle={() => toggle(issue.id)}
-            onSelect={() => select(issue)}
+            expanded={expanded}
+            selected={selected}
+            onToggle={toggle}
+            onSelect={select}
           />
         ))}
       </div>
@@ -125,22 +146,24 @@ export function IssueTreePanel({
 
 interface IssueNodeItemProps {
   issue: IssueNode;
-  isExpanded: boolean;
-  isSelected: boolean;
+  expanded: Set<string>;
+  selected: string | null;
   depth?: number;
-  onToggle: () => void;
-  onSelect: () => void;
+  onToggle: (id: string) => void;
+  onSelect: (issue: IssueNode) => void;
 }
 
 function IssueNodeItem({
   issue,
-  isExpanded,
-  isSelected,
+  expanded,
+  selected,
   depth = 0,
   onToggle,
   onSelect,
 }: IssueNodeItemProps): React.JSX.Element {
   const hasChildren = (issue.children?.length ?? 0) > 0;
+  const isExpanded = expanded.has(issue.id);
+  const isSelected = selected === issue.id;
 
   return (
     <div>
@@ -158,7 +181,7 @@ function IssueNodeItem({
         {/* 확장 아이콘 */}
         <button
           className="flex-shrink-0 w-4 h-4 flex items-center justify-center text-gray-400"
-          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          onClick={(e) => { e.stopPropagation(); onToggle(issue.id); }}
         >
           {hasChildren ? (isExpanded ? "▾" : "▸") : "•"}
         </button>
@@ -208,17 +231,34 @@ function IssueNodeItem({
             <IssueNodeItem
               key={child.id}
               issue={child}
-              isExpanded={false}
-              isSelected={false}
+              expanded={expanded}
+              selected={selected}
               depth={depth + 1}
-              onToggle={() => {}}
-              onSelect={() => {}}
+              onToggle={onToggle}
+              onSelect={onSelect}
             />
           ))}
         </div>
       )}
     </div>
   );
+}
+
+function mapClusterToIssue(clusterName: string): string {
+  const matched = Object.entries(LEGAL_CONCEPT_MAP).find(
+    ([keyword]) => clusterName.includes(keyword) || keyword.includes(clusterName)
+  );
+  return matched?.[1] ?? `"${clusterName}" 관련 법률 쟁점`;
+}
+
+function normalizeStrength(
+  clusterCentrality: number,
+  maxCentrality: number
+): IssueNode["strength"] {
+  const normalized = Math.min(0.9, (clusterCentrality / maxCentrality) * 0.7 + 0.2);
+  if (normalized >= 0.7) return "strong";
+  if (normalized >= 0.45) return "medium";
+  return "weak";
 }
 
 function StrengthBadge({ strength }: { strength: "strong" | "medium" | "weak" }): React.JSX.Element {

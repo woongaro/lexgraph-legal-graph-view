@@ -1,9 +1,9 @@
 {
 	"id": "lexgraph-legal-graph-view",
 	"name": "LexGraph",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"minAppVersion": "0.15.0",
-	"description": "Analyze Korean legal documents using knowledge graphs. Detects legal issues, generates counter-arguments, and visualizes party relationships for judgments, contracts, and statutes. Works fully offline.",
+	"description": "Analyze Korean legal documents with graphs, issue trees, evidence matrices, and optional AI/Open API enrichment for judgments, contracts, briefs, and statutes.",
 	"author": "woongaro",
 	"authorUrl": "https://github.com/woongaro",
 	"isDesktopOnly": false

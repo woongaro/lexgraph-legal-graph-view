@@ -38,10 +38,13 @@ export interface LexGraphSettings {
   GEMINI_API_KEY: string;
   OPENAI_API_KEY: string;
   CLAUDE_API_KEY: string;
+  AI_GRAPH_ENABLED: boolean;
+  AI_GRAPH_FALLBACK: boolean;
 
   // === 그래프 표시 설정 ===
   COLOR_SCHEME: ColorScheme;
   RELOADING_GRAPH: GraphReloadMode;
+  GRAPH_STATE_PERSISTENCE_ENABLED: boolean;
 
   // === 페이지 처리 설정 ===
   SINGLE_PAGE_GRAPH_PROCESSING: PageProcessingMode;
@@ -55,7 +58,7 @@ export interface LexGraphSettings {
   LEGAL_CITATION_LINK: boolean;
   LEGAL_STOPWORDS_ENABLED: boolean;
   LEGAL_DB_INTEGRATION: LegalDbIntegration;
-  LEGAL_MOJ_API_KEY: string;
+  LEGAL_OPEN_API_OC: string;
   LEGAL_ISSUE_PANEL_ENABLED: boolean;
   LEGAL_EVIDENCE_MATRIX_ENABLED: boolean;
   LEGAL_PARTY_GRAPH_ENABLED: boolean;
@@ -71,10 +74,13 @@ export const DEFAULT_SETTINGS: LexGraphSettings = {
   GEMINI_API_KEY: "",
   OPENAI_API_KEY: "",
   CLAUDE_API_KEY: "",
+  AI_GRAPH_ENABLED: false,
+  AI_GRAPH_FALLBACK: true,
 
   // 그래프
   COLOR_SCHEME: "auto",
   RELOADING_GRAPH: "automatic",
+  GRAPH_STATE_PERSISTENCE_ENABLED: true,
 
   // 페이지 처리
   SINGLE_PAGE_GRAPH_PROCESSING: "All Text",
@@ -88,7 +94,7 @@ export const DEFAULT_SETTINGS: LexGraphSettings = {
   LEGAL_CITATION_LINK: true,
   LEGAL_STOPWORDS_ENABLED: true,
   LEGAL_DB_INTEGRATION: "enabled",
-  LEGAL_MOJ_API_KEY: "",
+  LEGAL_OPEN_API_OC: "",
   LEGAL_ISSUE_PANEL_ENABLED: true,
   LEGAL_EVIDENCE_MATRIX_ENABLED: true,
   LEGAL_PARTY_GRAPH_ENABLED: true,
