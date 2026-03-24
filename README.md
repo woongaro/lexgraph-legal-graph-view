@@ -1,6 +1,6 @@
 # LexGraph — Korean Legal AI Graph View for Obsidian
 
-Analyze Korean legal documents using [InfraNodus](https://infranodus.com) knowledge graphs. Automatically detects legal issues, generates counter-arguments, and visualizes party relationships for judgments, contracts, and statutes.
+한국 법률 문서를 **로컬 지식 그래프**로 분석하는 Obsidian 플러그인. 법률 쟁점 자동 탐지, 반박 논거 생성, 당사자 관계 시각화를 외부 서비스 없이 완전 로컬에서 처리합니다.
 
 > **대상 사용자**: 한국 법률 전문가, 변호사, 법학 연구자
 
@@ -10,7 +10,7 @@ Analyze Korean legal documents using [InfraNodus](https://infranodus.com) knowle
 
 | 탭 | 기능 |
 |----|------|
-| 그래프 | InfraNodus 지식 그래프 — 핵심 개념 클러스터·구조적 공백 시각화 |
+| 그래프 | 로컬 지식 그래프 — 공출현 분석 기반 핵심 개념 클러스터·구조적 공백 시각화 |
 | 쟁점 | 판결문·계약서에서 법률 쟁점 자동 탐지 (민법·형법·행정법 패턴) |
 | 당사자 | 원고·피고 관계도 — 역할·법인 여부 분류 |
 | 증거 | 증거·사실 매트릭스 — 쟁점별 증거력 평가 |
@@ -26,12 +26,12 @@ Analyze Korean legal documents using [InfraNodus](https://infranodus.com) knowle
 
 ### 법률 AI 분석 모드
 
-| 모드 | 설명 | API 필요 |
-|------|------|---------|
-| 쟁점 탐지 | 규칙 기반 + 그래프 클러스터 분석 | 선택 |
-| 반박 논거 | 취약점 패턴 (인과관계·과실·손해·계약·시효) | 선택 |
-| 준비서면 아웃라인 | InfraNodus AI 기반 구조 생성 | 필수 |
-| 위험 분석 | 계약 조항 위험도 평가 | 필수 |
+| 모드 | 설명 | AI API 필요 |
+|------|------|------------|
+| 쟁점 탐지 | 규칙 기반 + 그래프 클러스터 로컬 분석 | 불필요 |
+| 반박 논거 | 취약점 패턴 (인과관계·과실·손해·계약·시효) 로컬 분석 | 불필요 |
+| 준비서면 아웃라인 | AI API 기반 서면 구조 생성 | 필요 (선택) |
+| 위험 분석 | 계약 조항 위험도 AI 평가 | 필요 (선택) |
 
 ---
 
@@ -52,11 +52,16 @@ Analyze Korean legal documents using [InfraNodus](https://infranodus.com) knowle
 
 ## 설정
 
-### 필수 설정
+### AI API 설정 (선택)
 
-| 항목 | 설명 |
-|------|------|
-| InfraNodus API 키 | [infranodus.com/subscription](https://infranodus.com/subscription) 에서 발급 |
+그래프 분석·쟁점 탐지·반박 논거는 **AI API 없이** 동작합니다.
+준비서면 아웃라인·위험 분석 기능은 아래 중 하나의 API 키가 필요합니다.
+
+| AI 제공자 | 설명 |
+|-----------|------|
+| Gemini | Google AI Studio에서 발급 (무료 티어 있음) |
+| OpenAI | platform.openai.com에서 발급 |
+| Claude | console.anthropic.com에서 발급 |
 
 ### 법률 모드 설정
 
@@ -99,8 +104,8 @@ Analyze Korean legal documents using [InfraNodus](https://infranodus.com) knowle
 
 ## 데이터 및 개인정보
 
-- 문서 내용은 그래프 생성을 위해 InfraNodus API로 전송됩니다
-- `doNotSave: true` 옵션이 기본 적용되어 서버에 저장되지 않습니다
+- **그래프 생성·쟁점 탐지·반박 논거는 완전 로컬 처리** — 문서 내용이 외부로 전송되지 않습니다
+- AI API 기능(준비서면 아웃라인·위험 분석) 사용 시에만 설정한 AI 제공자(Gemini/OpenAI/Claude)로 텍스트가 전송됩니다
 - API 키는 Obsidian 로컬 데이터에만 저장됩니다
 - 법제처 Open API 사용 시 해당 기관의 이용약관이 적용됩니다
 
@@ -119,9 +124,10 @@ Analyze Korean legal documents using [InfraNodus](https://infranodus.com) knowle
 
 ## 기술 스택
 
-- **그래프 엔진**: [InfraNodus API](https://infranodus.com) (외부 서비스)
-- **법령 DB**: [법제처 Open API](https://www.law.go.kr) (무료)
-- **NLP**: 규칙 기반 한국어 법률 전처리
+- **그래프 엔진**: 로컬 구현 — 공출현 행렬 + 레이블 전파 클러스터링 + 구조적 갭 탐지 (외부 서비스 불필요)
+- **AI (선택)**: Gemini / OpenAI / Claude REST API 직접 호출
+- **법령 DB**: [법제처 Open API](https://www.law.go.kr) (무료, 공개)
+- **NLP**: 규칙 기반 한국어 법률 전처리 (500+ 불용어 사전)
 - **UI**: React 18 + Tailwind CSS
 
 ---
