@@ -3,7 +3,7 @@
 	"name": "LexGraph",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Analyze Korean legal documents using knowledge graphs. Detects legal issues, generates counter-arguments, and visualizes party relationships for judgments, contracts, and statutes. Requires InfraNodus API.",
+	"description": "Analyze Korean legal documents using knowledge graphs. Detects legal issues, generates counter-arguments, and visualizes party relationships for judgments, contracts, and statutes.",
 	"author": "woongaro",
 	"authorUrl": "https://github.com/woongaro",
 	"isDesktopOnly": false

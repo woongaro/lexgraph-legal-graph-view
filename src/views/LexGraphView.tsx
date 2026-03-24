@@ -10,7 +10,9 @@ import type { LegalDocumentType, LegalAnalysisMode } from "../settings/LexGraphS
 import type { ExtractionResult } from "../legal/preprocessor/LegalEntityExtractor";
 import type { DocumentMetadata } from "../legal/preprocessor/LegalTextPreprocessor";
 import type { IssueSpotResult } from "../legal/ai/IssueSpotter";
-import { InfraNodusClient } from "../infranodus/InfraNodusClient";
+import type { LocalGraphResult } from "../graph/types";
+import { buildLocalGraph } from "../graph/LocalGraphEngine";
+import { callAi, isAiConfigured } from "../ai/LocalAiClient";
 import { buildLegalPrompt } from "../legal/ai/LegalPromptTemplates";
 import { spotIssues } from "../legal/ai/IssueSpotter";
 import { generateCounterArguments, formatCounterAnalysis } from "../legal/ai/CounterArgumentGen";
@@ -37,14 +39,12 @@ export interface GraphLoadParams {
 export interface GraphState {
   isLoading: boolean;
   error?: string;
-  graphUrl?: string;
+  graphData?: LocalGraphResult;
   documentType: LegalDocumentType;
   metadata?: DocumentMetadata | null;
   entities?: ExtractionResult | null;
   aiResult?: string;
   lastFilePath?: string;
-  graphClusters?: import("../infranodus/types").TopicCluster[];
-  graphGaps?: import("../infranodus/types").StructuralGap[];
 }
 
 /**
@@ -58,7 +58,6 @@ export class LexGraphView extends ItemView {
     documentType: "general",
   };
 
-  // React 상태 업데이트 콜백 (App 컴포넌트에서 주입)
   private setGraphStateCallback?: (state: GraphState) => void;
 
   constructor(leaf: WorkspaceLeaf, plugin: LexGraphPlugin) {
@@ -83,18 +82,13 @@ export class LexGraphView extends ItemView {
     containerEl.empty();
     containerEl.addClass("lexgraph-view");
 
-    // React 루트 마운트
     this.root = createRoot(containerEl);
     this.root.render(
       <LexGraphApp
         plugin={this.plugin}
         initialState={this.graphState}
-        onStateChange={(state) => {
-          this.graphState = state;
-        }}
-        onRegisterSetState={(setter) => {
-          this.setGraphStateCallback = setter;
-        }}
+        onStateChange={(state) => { this.graphState = state; }}
+        onRegisterSetState={(setter) => { this.setGraphStateCallback = setter; }}
       />
     );
   }
@@ -104,20 +98,10 @@ export class LexGraphView extends ItemView {
     this.root = null;
   }
 
-  setTabTitle(title: string): void {
-    const leaf = this.leaf as WorkspaceLeaf & { tabHeaderEl?: HTMLElement };
-    if (leaf.tabHeaderEl) {
-      const titleEl = leaf.tabHeaderEl.querySelector(".workspace-tab-header-inner-title");
-      if (titleEl) titleEl.textContent = title;
-    }
-  }
-
   /**
    * 그래프 리로드 — 외부에서 호출
    */
   async reloadGraph(params: GraphLoadParams): Promise<void> {
-    const { settings } = this.plugin;
-
     this.updateState({
       isLoading: true,
       error: undefined,
@@ -128,7 +112,6 @@ export class LexGraphView extends ItemView {
     });
 
     try {
-      // 텍스트 준비
       let text = params.processedText ?? "";
 
       if (!text && params.filePath && !params.isFolder) {
@@ -150,42 +133,21 @@ export class LexGraphView extends ItemView {
         return;
       }
 
-      // InfraNodus API로 그래프 생성
-      if (!settings.INFRANODUS_API_KEY) {
-        // API 키 없음 — 인증 안내 화면으로
+      // 로컬 그래프 빌드
+      const graphData = buildLocalGraph(text);
+
+      if (graphData.nodes.length === 0) {
         this.updateState({
           isLoading: false,
-          error: "api_key_missing",
+          error: "텍스트에서 충분한 법률 개념을 추출하지 못했습니다. 더 긴 문서를 분석해보세요.",
         });
         return;
       }
 
-      const graphData = await InfraNodusClient.getGraphAndStatements({
-        text,
-        apiKey: settings.INFRANODUS_API_KEY,
-        apiUrl: settings.INFRANODUS_API_URL,
-        doNotSave: true,
-        addStats: true,
-        aiTopics: true,
-      });
-
-      if (graphData.error) {
-        this.updateState({ isLoading: false, error: graphData.error });
-        return;
-      }
-
-      // 그래프 데이터 추출
-      const extracted = InfraNodusClient.extractDataFromGraphData(graphData);
-
-      // 그래프 URL 구성 (iframe 렌더링용)
-      const graphUrl = this.buildGraphUrl(text, params);
-
       this.updateState({
         isLoading: false,
-        graphUrl,
+        graphData,
         documentType: params.documentType ?? "general",
-        graphClusters: extracted.topics,
-        graphGaps: extracted.gaps,
       });
 
     } catch (err) {
@@ -217,10 +179,11 @@ export class LexGraphView extends ItemView {
       const rawText = await this.app.vault.cachedRead(file);
       const docType = this.graphState.documentType;
       const entities = this.graphState.entities ?? emptyEntities();
-      const clusters = this.graphState.graphClusters ?? [];
-      const gaps = this.graphState.graphGaps ?? [];
+      const graphData = this.graphState.graphData;
+      const clusters = graphData?.clusters ?? [];
+      const gaps = graphData?.gaps ?? [];
 
-      // 쟁점 탐지: 로컬 처리 (API 불필요)
+      // 쟁점 탐지: 로컬 처리
       if (mode === "issue_spotting") {
         const result = spotIssues(rawText, docType, clusters, gaps, entities);
         this.updateState({ aiResult: formatIssueSpotResult(result) });
@@ -228,7 +191,7 @@ export class LexGraphView extends ItemView {
         return;
       }
 
-      // 반박 논거: 로컬 처리 (API 불필요)
+      // 반박 논거: 로컬 처리
       if (mode === "counter_argument") {
         const issueResult = spotIssues(rawText, docType, clusters, gaps, entities);
         const counterResult = generateCounterArguments(issueResult.issues, clusters, gaps, entities);
@@ -237,85 +200,39 @@ export class LexGraphView extends ItemView {
         return;
       }
 
-      // brief_outline / risk_analysis: InfraNodus AI 사용
-      if (!settings.INFRANODUS_API_KEY) {
-        new Notice("InfraNodus API 키를 설정하세요.");
+      // brief_outline / risk_analysis / general: AI 사용
+      if (!isAiConfigured(settings)) {
+        new Notice("AI 제공자 및 API 키를 설정 탭에서 입력하세요.");
+        this.updateState({ aiResult: "AI 제공자가 설정되지 않았습니다.\n설정 > AI 제공자를 선택하고 API 키를 입력하세요." });
         return;
       }
 
-      // 그래프 데이터가 없으면 새로 조회
-      let topics = clusters;
-      let gapsList = gaps;
-      let topNodes: string[] = [];
-
-      if (topics.length === 0) {
-        const graphData = await InfraNodusClient.getGraphAndStatements({
-          text: rawText,
-          apiKey: settings.INFRANODUS_API_KEY,
-          apiUrl: settings.INFRANODUS_API_URL,
-          doNotSave: true,
-          addStats: true,
-        });
-        const extracted = InfraNodusClient.extractDataFromGraphData(graphData);
-        topics = extracted.topics;
-        gapsList = extracted.gaps;
-        topNodes = extracted.topNodes;
-      }
+      // 그래프 없으면 빌드
+      const activeGraphData = graphData ?? buildLocalGraph(rawText);
+      const topNodes = activeGraphData.topNodes;
 
       const promptResult = buildLegalPrompt({
         mode,
         documentType: docType,
         topNodes,
-        clusters: topics,
-        gaps: gapsList,
+        clusters: activeGraphData.clusters,
+        gaps: activeGraphData.gaps,
         entities,
       });
 
-      const adviceResponse = await InfraNodusClient.generateAdvice({
-        prompt: promptResult.userPrompt,
-        promptContext: promptResult.contextInfo,
-        modelToUse: settings.AI_MODEL,
-        apiKey: settings.INFRANODUS_API_KEY,
-        apiUrl: settings.INFRANODUS_API_URL,
-        mode: "legal",
-      });
+      const aiText = await callAi(
+        promptResult.systemPrompt,
+        promptResult.userPrompt,
+        settings
+      );
 
-      if (adviceResponse.advice) {
-        this.updateState({ aiResult: adviceResponse.advice });
-        new Notice("법률 AI 분석 완료");
-      }
+      this.updateState({ aiResult: aiText });
+      new Notice("법률 AI 분석 완료");
+
     } catch (err) {
       const message = err instanceof Error ? err.message : "분석 실패";
       new Notice(`AI 분석 오류: ${message}`);
     }
-  }
-
-  /**
-   * 그래프 iframe URL 구성
-   */
-  private buildGraphUrl(text: string, params: GraphLoadParams): string {
-    const { settings } = this.plugin;
-    const encodedText = encodeURIComponent(text.slice(0, 2000));
-    const theme = this.getColorScheme();
-
-    let url = `${settings.INFRANODUS_GRAPH_URL}?text=${encodedText}&theme=${theme}`;
-
-    if (settings.DEFAULT_GRAPH_MODE) {
-      url += `&mode=${settings.DEFAULT_GRAPH_MODE}`;
-    }
-
-    return url;
-  }
-
-  /**
-   * 현재 색상 테마 반환
-   */
-  private getColorScheme(): string {
-    const { COLOR_SCHEME } = this.plugin.settings;
-    if (COLOR_SCHEME !== "auto") return COLOR_SCHEME;
-
-    const isDark = document.body.classList.contains("theme-dark");
-    return isDark ? "dark" : "light";
   }
 
   /**
@@ -329,7 +246,6 @@ export class LexGraphView extends ItemView {
     if (!(folder instanceof TFolder)) return "";
 
     const contents: string[] = [];
-
     for (const child of folder.children) {
       if (child instanceof TFile && child.extension === "md") {
         const content = await this.app.vault.cachedRead(child);

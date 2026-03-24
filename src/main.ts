@@ -213,15 +213,11 @@ export default class LexGraphPlugin extends Plugin {
       },
     });
 
-    // 쟁점 분석 실행
+    // 쟁점 분석 실행 (로컬)
     this.addCommand({
       id: "run-issue-analysis",
-      name: "쟁점 분석 실행 (AI)",
+      name: "쟁점 분석 실행 (로컬)",
       callback: async () => {
-        if (!this.settings.INFRANODUS_API_KEY) {
-          new Notice("InfraNodus API 키를 먼저 설정하세요.");
-          return;
-        }
         const graphLeaves = this.app.workspace.getLeavesOfType(LEXGRAPH_VIEW_TYPE);
         if (graphLeaves.length === 0) {
           new Notice("먼저 그래프 뷰를 열어주세요.");
@@ -232,15 +228,11 @@ export default class LexGraphPlugin extends Plugin {
       },
     });
 
-    // 반박 논거 생성
+    // 반박 논거 생성 (로컬)
     this.addCommand({
       id: "generate-counter-arguments",
-      name: "반박 논거 생성 (AI)",
+      name: "반박 논거 생성 (로컬)",
       callback: async () => {
-        if (!this.settings.INFRANODUS_API_KEY) {
-          new Notice("InfraNodus API 키를 먼저 설정하세요.");
-          return;
-        }
         const graphLeaves = this.app.workspace.getLeavesOfType(LEXGRAPH_VIEW_TYPE);
         if (graphLeaves.length === 0) {
           new Notice("먼저 그래프 뷰를 열어주세요.");
@@ -251,15 +243,11 @@ export default class LexGraphPlugin extends Plugin {
       },
     });
 
-    // 준비서면 아웃라인 생성
+    // 준비서면 아웃라인 생성 (AI)
     this.addCommand({
       id: "generate-brief-outline",
       name: "준비서면 아웃라인 생성 (AI)",
       callback: async () => {
-        if (!this.settings.INFRANODUS_API_KEY) {
-          new Notice("InfraNodus API 키를 먼저 설정하세요.");
-          return;
-        }
         const graphLeaves = this.app.workspace.getLeavesOfType(LEXGRAPH_VIEW_TYPE);
         if (graphLeaves.length === 0) {
           new Notice("먼저 그래프 뷰를 열어주세요.");

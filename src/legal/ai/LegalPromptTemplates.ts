@@ -2,7 +2,7 @@
 // InfraNodus AI에 전달하는 법률 분석 프롬프트
 
 import type { LegalAnalysisMode, LegalDocumentType } from "../../settings/LexGraphSettings";
-import type { TopicCluster, StructuralGap } from "../../infranodus/types";
+import type { TopicCluster, StructuralGap } from "../../graph/types";
 import type { ExtractionResult } from "../preprocessor/LegalEntityExtractor";
 
 /**

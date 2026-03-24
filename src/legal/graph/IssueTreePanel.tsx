@@ -2,7 +2,7 @@
 // 법률 문서에서 추출된 쟁점을 계층적 트리로 표시
 
 import React, { useState } from "react";
-import type { TopicCluster, StructuralGap } from "../../infranodus/types";
+import type { TopicCluster, StructuralGap } from "../../graph/types";
 
 /**
  * 쟁점 트리 노드

@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from "vitest";
 import { spotIssues } from "../IssueSpotter";
-import type { TopicCluster, StructuralGap } from "../../../infranodus/types";
+import type { TopicCluster, StructuralGap } from "../../../graph/types";
 import type { ExtractionResult } from "../../preprocessor/LegalEntityExtractor";
 
 const emptyEntities = (): ExtractionResult => ({

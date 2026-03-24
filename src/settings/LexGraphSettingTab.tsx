@@ -18,44 +18,81 @@ export class LexGraphSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h2", { text: "LexGraph 설정" });
     containerEl.createEl("p", {
-      text: "한국 법률 특화 InfraNodus Advanced Graph View 플러그인",
+      text: "한국 법률 문서 지식 그래프 분석 플러그인",
       cls: "setting-item-description",
     });
 
-    // ── InfraNodus API 설정 ──────────────────────────────
-    containerEl.createEl("h3", { text: "InfraNodus API" });
+    // ── AI 제공자 설정 ──────────────────────────────────
+    containerEl.createEl("h3", { text: "AI 제공자" });
+    containerEl.createEl("p", {
+      text: "준비서면 아웃라인, 계약 위험 분석 등 AI 분석 기능에 사용됩니다. 쟁점 탐지·반박 논거는 AI 없이 로컬 동작합니다.",
+      cls: "setting-item-description",
+    });
 
     new Setting(containerEl)
-      .setName("InfraNodus API 키")
-      .setDesc("InfraNodus > 구독 페이지에서 API 키를 발급받으세요.")
-      .addText((text) =>
-        text
-          .setPlaceholder("API 키 입력")
-          .setValue(this.plugin.settings.INFRANODUS_API_KEY)
-          .onChange(async (value) => {
-            await this.plugin.saveSettings({ INFRANODUS_API_KEY: value });
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("AI 모델")
-      .setDesc("분석에 사용할 AI 모델을 선택하세요.")
+      .setName("AI 제공자 선택")
+      .setDesc("사용할 AI 서비스를 선택하세요.")
       .addDropdown((dropdown) =>
         dropdown
-          .addOption("gpt-4o-mini", "GPT-4o Mini (빠름/경제적)")
-          .addOption("gpt-4o", "GPT-4o (최고 품질)")
-          .addOption("gpt-4", "GPT-4")
-          .addOption("gpt-3.5-turbo", "GPT-3.5 Turbo (저렴)")
-          .setValue(this.plugin.settings.AI_MODEL)
+          .addOption("none", "사용 안 함")
+          .addOption("gemini", "Google Gemini")
+          .addOption("openai", "OpenAI (GPT)")
+          .addOption("claude", "Anthropic Claude")
+          .setValue(this.plugin.settings.AI_PROVIDER)
           .onChange(async (value) => {
             await this.plugin.saveSettings({
-              AI_MODEL: value as LexGraphSettings["AI_MODEL"],
+              AI_PROVIDER: value as LexGraphSettings["AI_PROVIDER"],
             });
+            this.display();
           })
       );
 
+    const provider = this.plugin.settings.AI_PROVIDER;
+
+    if (provider === "gemini" || provider === "none") {
+      new Setting(containerEl)
+        .setName("Gemini API 키")
+        .setDesc("Google AI Studio (aistudio.google.com)에서 발급받으세요. 무료 티어 제공.")
+        .addText((text) =>
+          text
+            .setPlaceholder("AIza...")
+            .setValue(this.plugin.settings.GEMINI_API_KEY)
+            .onChange(async (value) => {
+              await this.plugin.saveSettings({ GEMINI_API_KEY: value.trim() });
+            })
+        );
+    }
+
+    if (provider === "openai" || provider === "none") {
+      new Setting(containerEl)
+        .setName("OpenAI API 키")
+        .setDesc("platform.openai.com에서 발급받으세요. gpt-4o-mini 사용.")
+        .addText((text) =>
+          text
+            .setPlaceholder("sk-...")
+            .setValue(this.plugin.settings.OPENAI_API_KEY)
+            .onChange(async (value) => {
+              await this.plugin.saveSettings({ OPENAI_API_KEY: value.trim() });
+            })
+        );
+    }
+
+    if (provider === "claude" || provider === "none") {
+      new Setting(containerEl)
+        .setName("Claude API 키")
+        .setDesc("console.anthropic.com에서 발급받으세요. claude-3-5-sonnet 사용.")
+        .addText((text) =>
+          text
+            .setPlaceholder("sk-ant-...")
+            .setValue(this.plugin.settings.CLAUDE_API_KEY)
+            .onChange(async (value) => {
+              await this.plugin.saveSettings({ CLAUDE_API_KEY: value.trim() });
+            })
+        );
+    }
+
     // ── 법률 특화 설정 ──────────────────────────────────
-    containerEl.createEl("h3", { text: "⚖️ 법률 분석 설정" });
+    containerEl.createEl("h3", { text: "법률 분석 설정" });
 
     new Setting(containerEl)
       .setName("법률 모드 활성화")
@@ -65,22 +102,22 @@ export class LexGraphSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.LEGAL_MODE_ENABLED)
           .onChange(async (value) => {
             await this.plugin.saveSettings({ LEGAL_MODE_ENABLED: value });
-            this.display(); // 설정 새로고침
+            this.display();
           })
       );
 
     if (this.plugin.settings.LEGAL_MODE_ENABLED) {
       new Setting(containerEl)
         .setName("문서 유형")
-        .setDesc("분석할 법률 문서 유형을 선택하세요. '자동'으로 설정하면 내용을 분석하여 자동 감지합니다.")
+        .setDesc("분석할 법률 문서 유형. '자동'으로 설정하면 내용을 분석하여 자동 감지합니다.")
         .addDropdown((dropdown) =>
           dropdown
-            .addOption("auto", "🔍 자동 감지")
-            .addOption("judgment", "📄 판결문")
-            .addOption("contract", "📝 계약서")
-            .addOption("statute", "⚖️ 법령")
-            .addOption("brief", "📋 준비서면")
-            .addOption("general", "📃 일반 텍스트")
+            .addOption("auto", "자동 감지")
+            .addOption("judgment", "판결문")
+            .addOption("contract", "계약서")
+            .addOption("statute", "법령")
+            .addOption("brief", "준비서면")
+            .addOption("general", "일반 텍스트")
             .setValue(this.plugin.settings.LEGAL_DOCUMENT_TYPE)
             .onChange(async (value) => {
               await this.plugin.saveSettings({
@@ -90,15 +127,15 @@ export class LexGraphSettingTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName("AI 분석 모드")
+        .setName("기본 AI 분석 모드")
         .setDesc("기본 AI 분석 유형을 선택하세요.")
         .addDropdown((dropdown) =>
           dropdown
-            .addOption("issue_spotting", "🎯 쟁점 탐지")
-            .addOption("counter_argument", "⚔️ 반박 논거 생성")
-            .addOption("brief_outline", "📋 준비서면 아웃라인")
-            .addOption("risk_analysis", "⚠️ 계약 위험 분석")
-            .addOption("general", "💬 일반 분석")
+            .addOption("issue_spotting", "쟁점 탐지 (로컬)")
+            .addOption("counter_argument", "반박 논거 생성 (로컬)")
+            .addOption("brief_outline", "준비서면 아웃라인 (AI)")
+            .addOption("risk_analysis", "계약 위험 분석 (AI)")
+            .addOption("general", "일반 분석 (AI)")
             .setValue(this.plugin.settings.LEGAL_ANALYSIS_MODE)
             .onChange(async (value) => {
               await this.plugin.saveSettings({
@@ -109,7 +146,7 @@ export class LexGraphSettingTab extends PluginSettingTab {
 
       new Setting(containerEl)
         .setName("법률 불용어 제거")
-        .setDesc("조사, 상용 어미, 법률 형식어를 제거하여 핵심 법률 용어만 그래프에 반영합니다.")
+        .setDesc("조사·어미·법률 형식어를 제거하여 핵심 법률 용어만 그래프에 반영합니다.")
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.LEGAL_STOPWORDS_ENABLED)
@@ -195,65 +232,6 @@ export class LexGraphSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings({
               RELOADING_GRAPH: value as LexGraphSettings["RELOADING_GRAPH"],
             });
-          })
-      );
-
-    // ── 텍스트 처리 설정 ────────────────────────────────
-    containerEl.createEl("h3", { text: "텍스트 처리" });
-
-    new Setting(containerEl)
-      .setName("단일 페이지 처리")
-      .setDesc("단일 파일 분석 시 텍스트 처리 방식")
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOption("All Text", "전체 텍스트")
-          .addOption("[[Wiki Links]] Only", "위키링크만")
-          .setValue(this.plugin.settings.SINGLE_PAGE_GRAPH_PROCESSING)
-          .onChange(async (value) => {
-            await this.plugin.saveSettings({
-              SINGLE_PAGE_GRAPH_PROCESSING: value as LexGraphSettings["SINGLE_PAGE_GRAPH_PROCESSING"],
-            });
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("연결된 언급 포함")
-      .setDesc("[[위키링크]] 형태의 연결된 언급을 분석에 포함합니다.")
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOption("For all pages", "모든 페이지")
-          .addOption("For empty pages only", "빈 페이지만")
-          .addOption("Never", "포함 안 함")
-          .setValue(this.plugin.settings.INCLUDE_LINKED_MENTIONS)
-          .onChange(async (value) => {
-            await this.plugin.saveSettings({
-              INCLUDE_LINKED_MENTIONS: value as LexGraphSettings["INCLUDE_LINKED_MENTIONS"],
-            });
-          })
-      );
-
-    // ── 고급 설정 ────────────────────────────────────────
-    containerEl.createEl("h3", { text: "고급 설정" });
-
-    new Setting(containerEl)
-      .setName("InfraNodus API URL")
-      .setDesc("개발자 모드. 기본값: https://infranodus.com")
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.INFRANODUS_API_URL)
-          .onChange(async (value) => {
-            await this.plugin.saveSettings({ INFRANODUS_API_URL: value });
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("InfraNodus Graph URL")
-      .setDesc("개발자 모드. 기본값: https://graph.infranodus.com")
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.INFRANODUS_GRAPH_URL)
-          .onChange(async (value) => {
-            await this.plugin.saveSettings({ INFRANODUS_GRAPH_URL: value });
           })
       );
   }

@@ -1,7 +1,7 @@
 // 쟁점 자동 탐지기
 // 규칙 기반 선처리 + InfraNodus 클러스터 기반 쟁점 식별
 
-import type { TopicCluster, StructuralGap } from "../../infranodus/types";
+import type { TopicCluster, StructuralGap } from "../../graph/types";
 import type { LegalDocumentType } from "../../settings/LexGraphSettings";
 import type { ExtractionResult } from "../preprocessor/LegalEntityExtractor";
 

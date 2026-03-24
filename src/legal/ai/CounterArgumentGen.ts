@@ -1,7 +1,7 @@
 // 반박 논거 생성기
 // 현재 문서의 논리 구조 취약점을 분석하여 반박 전략 도출
 
-import type { TopicCluster, StructuralGap } from "../../infranodus/types";
+import type { TopicCluster, StructuralGap } from "../../graph/types";
 import type { DetectedIssue } from "./IssueSpotter";
 import type { ExtractionResult } from "../preprocessor/LegalEntityExtractor";
 
