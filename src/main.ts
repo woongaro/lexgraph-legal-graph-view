@@ -75,16 +75,20 @@ export default class LexGraphPlugin extends Plugin {
 
     // 설정 저장 이벤트 리스너
     this.onSettingsSaveEvent = ((event: Event) => {
+      const customEvent = event as CustomEvent<Partial<LexGraphSettings>>;
+      const newSettings = customEvent.detail;
+
       void (async () => {
-        const customEvent = event as CustomEvent<Partial<LexGraphSettings>>;
-        const newSettings = customEvent.detail;
-        if (!newSettings) {
-          document.dispatchEvent(new CustomEvent(EVENT_SETTINGS_SAVED));
-          return;
-        }
+        if (!newSettings) return;
         await this.saveSettings(newSettings);
-        document.dispatchEvent(new CustomEvent(EVENT_SETTINGS_SAVED));
-      })();
+      })()
+        .catch((error: unknown) => {
+          console.error("Failed to save LexGraph settings", error);
+          new Notice("LexGraph 설정을 저장하지 못했습니다.");
+        })
+        .finally(() => {
+          document.dispatchEvent(new CustomEvent(EVENT_SETTINGS_SAVED));
+        });
     }).bind(this);
 
     document.addEventListener(EVENT_SAVE_SETTINGS, this.onSettingsSaveEvent);

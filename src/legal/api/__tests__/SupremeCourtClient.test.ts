@@ -1,19 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { requestUrl } from "obsidian";
 import { SupremeCourtClient } from "../SupremeCourtClient";
 
+vi.mock("obsidian", () => ({
+  requestUrl: vi.fn(),
+}));
+
 describe("SupremeCourtClient", () => {
+  beforeEach(() => {
+    vi.mocked(requestUrl).mockReset();
+  });
+
   it("판례 검색 URL은 사건번호를 포함한다", () => {
     expect(SupremeCourtClient.getCaseUrl("2019다12345")).toContain("2019");
   });
 
   it("caseNumber 기반 목록 조회 요청을 만든다", async () => {
     const calls: string[] = [];
-    const originalFetch = global.fetch;
-    global.fetch = (async (input: RequestInfo | URL) => {
-      calls.push(String(input));
+    vi.mocked(requestUrl).mockImplementation(async ({ url }) => {
+      calls.push(String(url));
       return {
-        ok: true,
-        json: async () => ({
+        status: 200,
+        text: "",
+        json: {
           PrecSearch: {
             prec: [
               {
@@ -27,19 +36,16 @@ describe("SupremeCourtClient", () => {
               },
             ],
           },
-        }),
-      } as Response;
-    }) as typeof fetch;
+        },
+      } as Awaited<ReturnType<typeof requestUrl>>;
+    });
 
-    try {
-      const client = new SupremeCourtClient("g4c");
-      const result = await client.getCaseSummary("2019다12345");
-      expect(calls[0]).toContain("OC=g4c");
-      expect(calls[0]).toContain("target=prec");
-      expect(calls[0]).toContain("nb=2019%EB%8B%A412345");
-      expect(result?.caseId).toBe("228541");
-    } finally {
-      global.fetch = originalFetch;
-    }
+    const client = new SupremeCourtClient("g4c");
+    const result = await client.getCaseSummary("2019다12345");
+
+    expect(calls[0]).toContain("OC=g4c");
+    expect(calls[0]).toContain("target=prec");
+    expect(calls[0]).toContain("nb=2019%EB%8B%A412345");
+    expect(result?.caseId).toBe("228541");
   });
 });

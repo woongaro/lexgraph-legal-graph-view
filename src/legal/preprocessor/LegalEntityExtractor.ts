@@ -174,8 +174,9 @@ export function extractLegalEntities(text: string): ExtractionResult {
 
   // 3. 당사자 역할 추출
   for (const match of text.matchAll(PARTY_ROLE_PATTERN)) {
+    const matchIndex = match.index ?? 0;
     // 역할명 다음에 오는 이름 추출 시도
-    const afterRole = text.slice(match.index! + match[0].length, match.index! + match[0].length + 20);
+    const afterRole = text.slice(matchIndex + match[0].length, matchIndex + match[0].length + 20);
     const nameMatch = afterRole.match(/^\s+([가-힣]{2,5}(?:\s*주식회사|\s*유한회사)?)/);
 
     parties.push({
@@ -187,7 +188,7 @@ export function extractLegalEntities(text: string): ExtractionResult {
     entities.push({
       type: "party",
       value: match[0],
-      position: { start: match.index ?? 0, end: (match.index ?? 0) + match[0].length },
+      position: { start: matchIndex, end: matchIndex + match[0].length },
     });
   }
 

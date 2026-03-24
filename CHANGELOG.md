@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- Obsidian ReviewBot 대응을 위해 외부 네트워크 호출을 `fetch`에서 `requestUrl` 기반으로 정리했다.
+- 설정 저장 이벤트의 예외 처리와 완료 이벤트 dispatch를 보강해 저장 실패 시 안내 notice가 보이도록 했다.
+- 법률 엔티티 추출기에서 남아 있던 `match.index!` 사용을 정리해 당사자 위치 계산을 안정화했다.
+- Vitest에 Obsidian 테스트 stub을 추가하고 API 클라이언트 테스트를 `requestUrl` 기준으로 갱신했다.
+
 ## 1.1.0
 
 - AI 기반 그래프 생성과 로컬 fallback 경로를 추가했다.

@@ -1,15 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { requestUrl } from "obsidian";
 import { MojLawClient } from "../MojLawClient";
 
+vi.mock("obsidian", () => ({
+  requestUrl: vi.fn(),
+}));
+
 describe("MojLawClient", () => {
+  beforeEach(() => {
+    vi.mocked(requestUrl).mockReset();
+  });
+
   it("법령 검색 요청에 OC를 포함한다", async () => {
     const calls: string[] = [];
-    const originalFetch = global.fetch;
-    global.fetch = (async (input: RequestInfo | URL) => {
-      calls.push(String(input));
+    vi.mocked(requestUrl).mockImplementation(async ({ url }) => {
+      calls.push(String(url));
       return {
-        ok: true,
-        json: async () => ({
+        status: 200,
+        text: "",
+        json: {
           LawSearch: {
             law: [
               {
@@ -23,18 +32,15 @@ describe("MojLawClient", () => {
               },
             ],
           },
-        }),
-      } as Response;
-    }) as typeof fetch;
+        },
+      } as Awaited<ReturnType<typeof requestUrl>>;
+    });
 
-    try {
-      const client = new MojLawClient("g4c");
-      const result = await client.searchByName("민법");
-      expect(calls[0]).toContain("OC=g4c");
-      expect(calls[0]).toContain("target=law");
-      expect(result[0].lawName).toBe("민법");
-    } finally {
-      global.fetch = originalFetch;
-    }
+    const client = new MojLawClient("g4c");
+    const result = await client.searchByName("민법");
+
+    expect(calls[0]).toContain("OC=g4c");
+    expect(calls[0]).toContain("target=law");
+    expect(result[0].lawName).toBe("민법");
   });
 });

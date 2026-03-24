@@ -2,6 +2,8 @@
 
 법률 문서를 그래프, 쟁점 트리, 증거 매트릭스, 당사자 관계도, AI 분석 패널로 함께 다루는 Obsidian 플러그인입니다.
 
+현재 배포 기준 버전은 `1.2.0`입니다.
+
 ## 주요 기능
 
 - AI 기반 그래프 생성과 로컬 co-occurrence 그래프 fallback
@@ -66,6 +68,11 @@ npm test
 ```bash
 npm run dev
 ```
+
+개발/테스트 메모:
+
+- API 클라이언트는 Obsidian의 `requestUrl` 기반으로 동작합니다.
+- Vitest에서는 `obsidian` 런타임을 테스트용 stub으로 대체해 API/링크 로직을 검증합니다.
 
 ## 테스트 상태
 
