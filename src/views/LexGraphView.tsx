@@ -88,13 +88,14 @@ export class LexGraphView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "LexGraph 법률 분석";
+    return "LexGraph";
   }
 
   getIcon(): string {
     return "lexgraph-icon";
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async onOpen(): Promise<void> {
     const { containerEl } = this;
     containerEl.empty();
@@ -111,6 +112,7 @@ export class LexGraphView extends ItemView {
     );
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async onClose(): Promise<void> {
     this.root?.unmount();
     this.root = null;

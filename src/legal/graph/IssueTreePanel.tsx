@@ -176,7 +176,7 @@ function IssueNodeItem({
           ${issue.isGap ? "opacity-70" : ""}
         `}
         style={{ ["--lg-depth" as string]: depth } as React.CSSProperties}
-        onClick={onSelect}
+        onClick={() => onSelect(issue)}
       >
         {/* 확장 아이콘 */}
         <button

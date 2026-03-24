@@ -2,6 +2,7 @@
 // Gemini / OpenAI / Claude REST API 직접 호출 (SDK 없음)
 // Obsidian 플러그인은 Electron 위에서 실행되므로 CORS 제한 없음
 
+import { requestUrl } from "obsidian";
 import type { LexGraphSettings } from "../settings/LexGraphSettings";
 
 export type AiProvider = "gemini" | "openai" | "claude";
@@ -56,18 +57,19 @@ async function callGemini(
     generationConfig: { maxOutputTokens: 4096, temperature: 0.3 },
   };
 
-  const resp = await fetch(url, {
+  const resp = await requestUrl({
+    url,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    throw: false,
   });
 
-  if (!resp.ok) {
-    const err = await resp.text().catch(() => resp.statusText);
-    throw new Error(`Gemini API 오류 (${resp.status}): ${err}`);
+  if (resp.status < 200 || resp.status >= 300) {
+    throw new Error(`Gemini API 오류 (${resp.status}): ${resp.text}`);
   }
 
-  const data = await resp.json() as {
+  const data = resp.json as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     error?: { message?: string };
   };
@@ -88,7 +90,8 @@ async function callOpenAI(
 ): Promise<string> {
   if (!apiKey) throw new Error("OpenAI API 키가 설정되지 않았습니다.");
 
-  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+  const resp = await requestUrl({
+    url: "https://api.openai.com/v1/chat/completions",
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -103,14 +106,14 @@ async function callOpenAI(
       max_tokens: 4096,
       temperature: 0.3,
     }),
+    throw: false,
   });
 
-  if (!resp.ok) {
-    const err = await resp.text().catch(() => resp.statusText);
-    throw new Error(`OpenAI API 오류 (${resp.status}): ${err}`);
+  if (resp.status < 200 || resp.status >= 300) {
+    throw new Error(`OpenAI API 오류 (${resp.status}): ${resp.text}`);
   }
 
-  const data = await resp.json() as {
+  const data = resp.json as {
     choices?: Array<{ message?: { content?: string } }>;
     error?: { message?: string };
   };
@@ -131,7 +134,8 @@ async function callClaude(
 ): Promise<string> {
   if (!apiKey) throw new Error("Claude API 키가 설정되지 않았습니다.");
 
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+  const resp = await requestUrl({
+    url: "https://api.anthropic.com/v1/messages",
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -144,14 +148,14 @@ async function callClaude(
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
     }),
+    throw: false,
   });
 
-  if (!resp.ok) {
-    const err = await resp.text().catch(() => resp.statusText);
-    throw new Error(`Claude API 오류 (${resp.status}): ${err}`);
+  if (resp.status < 200 || resp.status >= 300) {
+    throw new Error(`Claude API 오류 (${resp.status}): ${resp.text}`);
   }
 
-  const data = await resp.json() as {
+  const data = resp.json as {
     content?: Array<{ type: string; text?: string }>;
     error?: { message?: string };
   };

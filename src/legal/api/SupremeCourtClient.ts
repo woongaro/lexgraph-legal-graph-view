@@ -3,6 +3,8 @@
 // - 판례 목록 조회 API: https://open.law.go.kr/LSO/openApi/guideResult.do?htmlName=precListGuide
 // - 판례 본문 조회 API: https://open.law.go.kr/LSO/openApi/guideResult.do?htmlName=precInfoGuide
 
+import { requestUrl } from "obsidian";
+
 export interface CaseSummary {
   caseId: string;
   caseNumber: string;
@@ -84,31 +86,30 @@ export class SupremeCourtClient {
     return this.parseSearchResults(data);
   }
 
-  async getCaseSummary(caseNumber: string): Promise<CaseSummary | null> {
-    const results = await this.searchCases({ caseNumber, pageSize: 5 });
+  getCaseSummary(caseNumber: string): Promise<CaseSummary | null> {
     const normalized = normalizeCaseNumber(caseNumber);
-    return (
+    return this.searchCases({ caseNumber, pageSize: 5 }).then((results) =>
       results.find((item) => normalizeCaseNumber(item.caseNumber) === normalized) ??
       results[0] ??
       null
     );
   }
 
-  async batchGetSummaries(caseNumbers: string[]): Promise<CaseSummary[]> {
+  batchGetSummaries(caseNumbers: string[]): Promise<CaseSummary[]> {
     const numbers = caseNumbers
       .map((caseNumber) => normalizeCaseNumber(caseNumber))
       .filter(Boolean);
-    if (numbers.length === 0) return [];
+    if (numbers.length === 0) return Promise.resolve([]);
 
-    const results = await this.searchCases({
+    return this.searchCases({
       caseNumber: [...new Set(numbers)].join(","),
       pageSize: Math.min(100, numbers.length),
+    }).then((results) => {
+      const byNumber = new Map(results.map((item) => [normalizeCaseNumber(item.caseNumber), item]));
+      return numbers
+        .map((number) => byNumber.get(number))
+        .filter((item): item is CaseSummary => item !== undefined);
     });
-
-    const byNumber = new Map(results.map((item) => [normalizeCaseNumber(item.caseNumber), item]));
-    return numbers
-      .map((number) => byNumber.get(number))
-      .filter((item): item is CaseSummary => item !== undefined);
   }
 
   async getCaseDetail(caseNumber: string): Promise<CaseDetail | null> {
@@ -195,12 +196,12 @@ export class SupremeCourtClient {
 }
 
 async function fetchJson(url: string, resourceLabel: string): Promise<unknown> {
-  const response = await fetch(url);
-  if (!response.ok) {
+  const response = await requestUrl({ url, throw: false });
+  if (response.status < 200 || response.status >= 300) {
     throw new Error(`${resourceLabel} 조회 실패: HTTP ${response.status}`);
   }
 
-  const data = await response.json() as Record<string, unknown>;
+  const data = response.json as Record<string, unknown>;
   const resultMessage = typeof data.result === "string" ? data.result : "";
   const message = typeof data.msg === "string" ? data.msg : "";
 

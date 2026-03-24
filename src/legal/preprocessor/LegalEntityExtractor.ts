@@ -149,8 +149,8 @@ export function extractLegalEntities(text: string): ExtractionResult {
     entities.push({
       type: "case_number",
       value: match[0],
-      position: { start: match.index!, end: match.index! + match[0].length },
-      context: getContext(text, match.index!, 50),
+      position: { start: match.index ?? 0, end: (match.index ?? 0) + match[0].length },
+      context: getContext(text, match.index ?? 0, 50),
     });
   }
 
@@ -168,7 +168,7 @@ export function extractLegalEntities(text: string): ExtractionResult {
       type: "statute",
       value: match[0],
       normalized: `${ref.lawName} 제${ref.articleNumber}조`,
-      position: { start: match.index!, end: match.index! + match[0].length },
+      position: { start: match.index ?? 0, end: (match.index ?? 0) + match[0].length },
     });
   }
 
@@ -187,7 +187,7 @@ export function extractLegalEntities(text: string): ExtractionResult {
     entities.push({
       type: "party",
       value: match[0],
-      position: { start: match.index!, end: match.index! + match[0].length },
+      position: { start: match.index ?? 0, end: (match.index ?? 0) + match[0].length },
     });
   }
 
@@ -197,7 +197,7 @@ export function extractLegalEntities(text: string): ExtractionResult {
     entities.push({
       type: "date",
       value: match[0],
-      position: { start: match.index!, end: match.index! + match[0].length },
+      position: { start: match.index ?? 0, end: (match.index ?? 0) + match[0].length },
     });
   }
 
@@ -214,7 +214,7 @@ export function extractLegalEntities(text: string): ExtractionResult {
       type: "citation",
       value: match[0],
       normalized: `${match[1]} ${match[3]}`,
-      position: { start: match.index!, end: match.index! + match[0].length },
+      position: { start: match.index ?? 0, end: (match.index ?? 0) + match[0].length },
     });
   }
 
@@ -223,7 +223,7 @@ export function extractLegalEntities(text: string): ExtractionResult {
     entities.push({
       type: "penalty",
       value: match[0],
-      position: { start: match.index!, end: match.index! + match[0].length },
+      position: { start: match.index ?? 0, end: (match.index ?? 0) + match[0].length },
     });
   }
 

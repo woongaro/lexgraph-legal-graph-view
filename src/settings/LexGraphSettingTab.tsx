@@ -16,22 +16,22 @@ export class LexGraphSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "LexGraph 설정" });
+    new Setting(containerEl).setName("LexGraph").setHeading();
     containerEl.createEl("p", {
-      text: "한국 법률 문서 지식 그래프 분석 플러그인",
+      text: "Korean legal document knowledge graph analysis plugin",
       cls: "setting-item-description",
     });
 
     // ── AI 제공자 설정 ──────────────────────────────────
-    containerEl.createEl("h3", { text: "AI 제공자" });
+    new Setting(containerEl).setName("AI provider").setHeading();
     containerEl.createEl("p", {
-      text: "준비서면 아웃라인, 계약 위험 분석 등 AI 분석 기능에 사용됩니다. 쟁점 탐지·반박 논거는 AI 없이 로컬 동작합니다.",
+      text: "Used for brief outline generation, contract risk analysis, and other AI-powered features. Issue spotting and counter-argument generation work without AI.",
       cls: "setting-item-description",
     });
 
     new Setting(containerEl)
-      .setName("AI 제공자 선택")
-      .setDesc("사용할 AI 서비스를 선택하세요.")
+      .setName("AI provider")
+      .setDesc("Select the AI service to use.")
       .addDropdown((dropdown) =>
         dropdown
           .addOption("none", "사용 안 함")
@@ -51,8 +51,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
 
     if (provider === "gemini" || provider === "none") {
       new Setting(containerEl)
-        .setName("Gemini API 키")
-        .setDesc("Google AI Studio (aistudio.google.com)에서 발급받으세요. 무료 티어 제공.")
+        .setName("Gemini API key")
+        .setDesc("Obtain from Google AI Studio (aistudio.google.com). A free tier is available.")
         .addText((text) =>
           text
             .setPlaceholder("AIza...")
@@ -65,8 +65,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
 
     if (provider === "openai" || provider === "none") {
       new Setting(containerEl)
-        .setName("OpenAI API 키")
-        .setDesc("platform.openai.com에서 발급받으세요. gpt-4o-mini 사용.")
+        .setName("OpenAI API key")
+        .setDesc("Obtain from platform.openai.com. Uses gpt-4o-mini.")
         .addText((text) =>
           text
             .setPlaceholder("sk-...")
@@ -79,8 +79,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
 
     if (provider === "claude" || provider === "none") {
       new Setting(containerEl)
-        .setName("Claude API 키")
-        .setDesc("console.anthropic.com에서 발급받으세요. claude-3-5-sonnet 사용.")
+        .setName("Claude API key")
+        .setDesc("Obtain from console.anthropic.com. Uses claude-3-5-sonnet.")
         .addText((text) =>
           text
             .setPlaceholder("sk-ant-...")
@@ -92,8 +92,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName("AI 기반 그래프 생성")
-      .setDesc("AI가 법률 개념 관계 그래프를 직접 추출합니다. API 호출 비용이 발생할 수 있습니다.")
+      .setName("AI graph generation")
+      .setDesc("AI extracts legal concept relationship graphs directly. API usage costs may apply.")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.AI_GRAPH_ENABLED)
@@ -105,8 +105,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
 
     if (this.plugin.settings.AI_GRAPH_ENABLED) {
       new Setting(containerEl)
-        .setName("AI 그래프 실패 시 로컬 그래프 사용")
-        .setDesc("AI 응답이 실패하거나 JSON 파싱이 불가능하면 기존 공출현 그래프로 자동 전환합니다.")
+        .setName("Fallback to local graph on AI failure")
+        .setDesc("If the AI response fails or JSON parsing is not possible, automatically switches to the co-occurrence graph.")
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.AI_GRAPH_FALLBACK)
@@ -117,11 +117,11 @@ export class LexGraphSettingTab extends PluginSettingTab {
     }
 
     // ── 법률 특화 설정 ──────────────────────────────────
-    containerEl.createEl("h3", { text: "법률 분석 설정" });
+    new Setting(containerEl).setName("Legal analysis").setHeading();
 
     new Setting(containerEl)
-      .setName("법률 모드 활성화")
-      .setDesc("한국 법률 문서 특화 분석 기능을 활성화합니다.")
+      .setName("Legal mode")
+      .setDesc("Enable Korean legal document specialized analysis features.")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.LEGAL_MODE_ENABLED)
@@ -133,8 +133,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
 
     if (this.plugin.settings.LEGAL_MODE_ENABLED) {
       new Setting(containerEl)
-        .setName("문서 유형")
-        .setDesc("분석할 법률 문서 유형. '자동'으로 설정하면 내용을 분석하여 자동 감지합니다.")
+        .setName("Document type")
+        .setDesc("Type of legal document to analyze. Set to 'Auto' to detect automatically from content.")
         .addDropdown((dropdown) =>
           dropdown
             .addOption("auto", "자동 감지")
@@ -152,8 +152,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName("기본 AI 분석 모드")
-        .setDesc("기본 AI 분석 유형을 선택하세요.")
+        .setName("Default AI analysis mode")
+        .setDesc("Select the default AI analysis type.")
         .addDropdown((dropdown) =>
           dropdown
             .addOption("issue_spotting", "쟁점 탐지 (로컬)")
@@ -170,8 +170,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName("법률 불용어 제거")
-        .setDesc("조사·어미·법률 형식어를 제거하여 핵심 법률 용어만 그래프에 반영합니다.")
+        .setName("Remove legal stopwords")
+        .setDesc("Remove Korean legal particles and formal terms to include only core legal terms in the graph.")
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.LEGAL_STOPWORDS_ENABLED)
@@ -181,8 +181,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName("법률 엔티티 하이라이트")
-        .setDesc("사건번호, 법령 조항, 당사자 정보를 자동 추출하여 표시합니다.")
+        .setName("Legal entity highlight")
+        .setDesc("Automatically extract and display case numbers, statute references, and party information.")
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.LEGAL_ENTITY_HIGHLIGHT)
@@ -192,8 +192,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName("판례 인용 연결")
-        .setDesc("판례 번호를 외부 판례 링크와 연결합니다.")
+        .setName("Citation linking")
+        .setDesc("Link case citation numbers to external case references.")
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.LEGAL_CITATION_LINK)
@@ -203,8 +203,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName("쟁점 트리 패널")
-        .setDesc("쟁점 분석 결과를 트리 구조로 표시합니다.")
+        .setName("Issue tree panel")
+        .setDesc("Display issue analysis results as a tree structure.")
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.LEGAL_ISSUE_PANEL_ENABLED)
@@ -214,8 +214,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName("증거 매트릭스")
-        .setDesc("쟁점-사실-증거 연결 매트릭스를 표시합니다.")
+        .setName("Evidence matrix")
+        .setDesc("Display an issue-fact-evidence connection matrix.")
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.LEGAL_EVIDENCE_MATRIX_ENABLED)
@@ -225,8 +225,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName("당사자 관계도")
-        .setDesc("당사자 간 법률 관계를 시각화합니다.")
+        .setName("Party relationship graph")
+        .setDesc("Visualize legal relationships between parties.")
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.LEGAL_PARTY_GRAPH_ENABLED)
@@ -236,8 +236,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName("국가법령정보 Open API 연동")
-        .setDesc("법령 조문과 판례 정보를 국가법령정보 Open API로 조회합니다.")
+        .setName("National legal information Open API integration")
+        .setDesc("Retrieve statute text and case information via the National Law Information Center Open API.")
         .addToggle((toggle) =>
           toggle
             .setValue(this.plugin.settings.LEGAL_DB_INTEGRATION === "enabled")
@@ -251,8 +251,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
 
       if (this.plugin.settings.LEGAL_DB_INTEGRATION === "enabled") {
         new Setting(containerEl)
-          .setName("Open API 요청변수 OC")
-          .setDesc("필수값. 사용자 이메일의 ID를 입력하세요. 예: g4c@korea.kr 이면 OC는 g4c")
+          .setName("Open API OC parameter")
+          .setDesc("Required. Enter the ID part of your email. E.g., if your email is g4c@korea.kr, enter g4c.")
           .addText((text) =>
             text
               .setPlaceholder("g4c")
@@ -265,11 +265,11 @@ export class LexGraphSettingTab extends PluginSettingTab {
     }
 
     // ── 그래프 표시 설정 ────────────────────────────────
-    containerEl.createEl("h3", { text: "그래프 표시" });
+    new Setting(containerEl).setName("Graph display").setHeading();
 
     new Setting(containerEl)
-      .setName("색상 테마")
-      .setDesc("그래프 색상 테마를 선택하세요.")
+      .setName("Color theme")
+      .setDesc("Select the graph color theme.")
       .addDropdown((dropdown) =>
         dropdown
           .addOption("auto", "자동 (Obsidian 테마 따름)")
@@ -284,8 +284,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("그래프 업데이트")
-      .setDesc("파일 변경 시 그래프 업데이트 방식을 선택하세요.")
+      .setName("Graph update")
+      .setDesc("Select how the graph updates when files change.")
       .addDropdown((dropdown) =>
         dropdown
           .addOption("automatic", "자동 (파일 변경 시)")
@@ -300,8 +300,8 @@ export class LexGraphSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("그래프 상태 저장")
-      .setDesc("문서별 노드 위치, 줌/패닝, 수동 증거/사실 입력을 플러그인 데이터에 저장합니다.")
+      .setName("Save graph state")
+      .setDesc("Save per-document node positions, zoom/pan, and manually entered evidence/facts to plugin data.")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.GRAPH_STATE_PERSISTENCE_ENABLED)

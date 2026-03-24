@@ -1,6 +1,8 @@
 // 법제처 국가법령정보 API 클라이언트
 // https://open.law.go.kr/LSO/openApi.do
 
+import { requestUrl } from "obsidian";
+
 /**
  * 법령 검색 결과
  */
@@ -199,12 +201,12 @@ export class MojLawClient {
 }
 
 async function fetchLawOpenData(url: string, resourceLabel: string): Promise<unknown> {
-  const response = await fetch(url);
-  if (!response.ok) {
+  const response = await requestUrl({ url, throw: false });
+  if (response.status < 200 || response.status >= 300) {
     throw new Error(`${resourceLabel} 조회 실패: HTTP ${response.status}`);
   }
 
-  const data = await response.json() as Record<string, unknown>;
+  const data = response.json as Record<string, unknown>;
   const resultMessage = typeof data.result === "string" ? data.result : "";
   const message = typeof data.msg === "string" ? data.msg : "";
 

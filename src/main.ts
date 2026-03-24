@@ -74,15 +74,17 @@ export default class LexGraphPlugin extends Plugin {
     this.syncEditorExtensions(true);
 
     // 설정 저장 이벤트 리스너
-    this.onSettingsSaveEvent = (async (event: Event) => {
-      const customEvent = event as CustomEvent<Partial<LexGraphSettings>>;
-      const newSettings = customEvent.detail;
-      if (!newSettings) {
+    this.onSettingsSaveEvent = ((event: Event) => {
+      void (async () => {
+        const customEvent = event as CustomEvent<Partial<LexGraphSettings>>;
+        const newSettings = customEvent.detail;
+        if (!newSettings) {
+          document.dispatchEvent(new CustomEvent(EVENT_SETTINGS_SAVED));
+          return;
+        }
+        await this.saveSettings(newSettings);
         document.dispatchEvent(new CustomEvent(EVENT_SETTINGS_SAVED));
-        return;
-      }
-      await this.saveSettings(newSettings);
-      document.dispatchEvent(new CustomEvent(EVENT_SETTINGS_SAVED));
+      })();
     }).bind(this);
 
     document.addEventListener(EVENT_SAVE_SETTINGS, this.onSettingsSaveEvent);

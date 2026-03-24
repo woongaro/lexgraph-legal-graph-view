@@ -11,7 +11,7 @@ export async function openGraphSideView(app: App): Promise<WorkspaceLeaf | null>
 
   if (existingLeaves.length > 0) {
     app.workspace.setActiveLeaf(existingLeaves[0], { focus: true });
-    app.workspace.revealLeaf(existingLeaves[0]);
+    void app.workspace.revealLeaf(existingLeaves[0]);
     return existingLeaves[0];
   }
 
@@ -21,7 +21,7 @@ export async function openGraphSideView(app: App): Promise<WorkspaceLeaf | null>
 
   await leaf.setViewState({ type: LEXGRAPH_VIEW_TYPE });
   app.workspace.setActiveLeaf(leaf, { focus: true });
-  app.workspace.revealLeaf(leaf);
+  void app.workspace.revealLeaf(leaf);
 
   return leaf;
 }

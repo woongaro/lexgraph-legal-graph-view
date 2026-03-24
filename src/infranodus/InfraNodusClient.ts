@@ -1,6 +1,7 @@
 // InfraNodus API 클라이언트
 // 기존 main.js의 InfraNodus.* 메서드를 TypeScript로 재작성
 
+import { requestUrl } from "obsidian";
 import type {
   GraphAndStatementsResponse,
   AdviceParams,
@@ -37,9 +38,15 @@ interface GetUserIdParams {
 export class InfraNodusClient {
   private static async request<T>(
     url: string,
-    options: RequestInit
+    options: { method: string; headers?: Record<string, string>; body?: string }
   ): Promise<T> {
-    const response = await fetch(url, options);
+    const response = await requestUrl({
+      url,
+      method: options.method,
+      headers: options.headers,
+      body: options.body,
+      throw: false,
+    });
 
     if (response.status === 401) {
       throw new ApiError("Invalid API key", 401);
@@ -47,11 +54,11 @@ export class InfraNodusClient {
     if (response.status === 429) {
       throw new ApiError("API quota exceeded", 429);
     }
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       throw new ApiError(`API error: ${response.status}`, response.status);
     }
 
-    return response.json() as Promise<T>;
+    return response.json as T;
   }
 
   /**

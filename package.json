@@ -1,6 +1,6 @@
 {
 	"name": "lexgraph-obsidian-plugin",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"description": "LexGraph: 법률 특화 InfraNodus Advanced Graph View Plugin for Obsidian",
 	"main": "main.js",
 	"scripts": {
